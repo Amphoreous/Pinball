@@ -147,41 +147,9 @@ This project was built using the [raylib-box2d-quickstart](https://github.com/Th
 
 ---
 
-## Grading Requirements
-
-### ✅ Mandatory Requirements Met
-
-**Core Functionality:**
-- ✅ **No crashes** during extended gameplay (tested 30+ minutes)
-- ✅ **Flipper controls** respond immediately to left/right arrow keys
-- ✅ **Kicker control** responds to down arrow key for ball launching
-- ✅ **Clear game begin/end** states with proper transitions
-
-**Scoring & Gameplay:**
-- ✅ **Current score** updates live during gameplay
-- ✅ **Previous score** displayed after each round ends
-- ✅ **Highest score** persists between game sessions
-- ✅ **Specific ball count** per round (3 balls) with automatic cycling
-- ✅ **At least one combo system** (POKEMON letter collection for bonuses)
-
-**Technical Features:**
-- ✅ **F1 debug mode** shows all physics shapes and collision boundaries
-- ✅ **Mouse joint functionality** allows dragging objects in debug mode
-- ✅ **Real-time performance** maintains stable 60 FPS without bullet-time
-- ✅ **Audio effects** for hits, bonuses, and combo completions
-- ✅ **Memory leak free** verified with testing tools
-
-**Documentation:**
-- ✅ **All team member names** listed in README and release
-- ✅ **GitHub repository link** included in all documentation
-- ✅ **Complete control instructions** documented
-- ✅ **Differences from original** clearly explained
-
----
-
 ## Contributing
 
-We welcome contributions to enhance the Pokemon Pinball Clone. Follow these steps to get involved:
+We welcome contributions to enhance the Pinball Clone. Follow these steps to get involved:
 
 1. **Fork the Repository**
 2. **Create a Feature Branch:**
@@ -227,7 +195,7 @@ We welcome contributions to enhance the Pokemon Pinball Clone. Follow these step
 
 This project's **source code** is licensed under the MIT License. All game assets (sprites, audio, visual elements) are used for educational purposes only and remain the property of their respective owners.
 
-> **Educational Note:** This project is developed as part of an academic assignment for the Game Design and Development course. All Pokemon-related assets and references are used solely for educational purposes and are not licensed under the MIT License.
+> **Educational Note:** This project is developed as part of an academic assignment for the Game Design and Development course.
 
 ---
 

@@ -21,8 +21,27 @@ public:
 	bool Start();
 	update_status Update();
 	bool CleanUp();
+	void OnCollision(PhysBody* bodyA, PhysBody* bodyB) override;
 
 public:
-
+	// Ball
+	PhysBody* ball = nullptr;
+	Texture2D ballTexture;
 	
+	// Flippers
+	PhysBody* leftFlipper = nullptr;
+	PhysBody* rightFlipper = nullptr;
+	
+	// Score tracking
+	int currentScore = 0;
+	int previousScore = 0;
+	int highestScore = 0;
+	int ballsRemaining = 3;
+	
+	// Game state
+	bool gameStarted = false;
+	bool roundActive = false;
+	
+	// Fonts for UI
+	Font font;
 };

@@ -39,3 +39,8 @@ enum update_status
 #define WIN_FULLSCREEN_DESKTOP false
 #define VSYNC				true
 #define TITLE "Physics 2D Playground"
+
+// Physics -----------
+#define METERS_TO_PIXELS 50.0f
+#define PIXELS_TO_METERS 0.02f
+#define METER_RATIO 0.02f

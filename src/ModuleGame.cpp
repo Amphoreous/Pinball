@@ -88,14 +88,58 @@ update_status ModuleGame::Update()
 	return UPDATE_CONTINUE;
 }
 
+float ModuleGame::CalculateImpactForce(PhysBody* body)
+{
+	b2Vec2 vel = body->body->GetLinearVelocity();
+	float speed = vel.Length();
+
+	float maxSpeed = 20.0f;
+	float force = speed / maxSpeed;
+
+	if (force > 1.0f) force = 1.0f;
+	if (force < 0.0f) force = 0.0f;
+
+	return force;
+}
+
+CollisionType ModuleGame::IdentifyCollision(PhysBody* bodyA, PhysBody* bodyB)
+{
+	// Check if hit a flipper
+	if (bodyB == leftFlipper || bodyB == rightFlipper)
+		return COLLISION_FLIPPER;
+
+	// Default: treat everything else as walls for now
+	return COLLISION_WALL;
+}
+
 void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
 {
 	// Handle collisions
 	LOG("Collision detected!");
 	
-	// Increase score on collision
-	currentScore += 10;
-	
+	float impactForce = CalculateImpactForce(bodyA);
+
+	CollisionType type = IdentifyCollision(bodyA, bodyB);
+
+	switch (type)
+	{
+	case COLLISION_FLIPPER:
+		App->audio->PlayFlipperHit(impactForce);
+		currentScore += 10;
+		break;
+
+	case COLLISION_BUMPER:
+		App->audio->PlayBumperHit(impactForce);
+		currentScore += 50;
+		break;
+	case COLLISION_WALL:
+	default:
+		// Wall collision - softer sound
+		App->audio->PlayBumperHit(impactForce * 0.5f);
+		currentScore += 10;
+		break;
+	}
+
 	// TODO: Play sound effect
 	// App->audio->PlayFx(collisionFx);
 }

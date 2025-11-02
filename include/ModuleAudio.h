@@ -26,13 +26,18 @@ public:
 	// Play a previously loaded sound
 	bool PlayFx(unsigned int fx, int repeat = 0);
 
-	void PlayFlipperHit();
-	void PlayBumperHit();
+	void PlayFlipperHit(float impactForce = 0.5f);
+	void PlayBumperHit(float impactForce = 0.5f);
 	void PlayBonusSound();
 	void PlayComboComplete();
 	void PlayBallLost();
 
+	// Sound variation
+	void PlayFxWithPitch(unsigned int fx, float pitch);
+	void PlayFxWithVolume(unsigned int fx, float volume);
+	void PlayFxWithVariation(unsigned int fx, float impactForce);
 
+	// Volume controls
 	void SetMasterVolume(float volume);
 	void SetSFXVolume(float volume);
 	void SetMusicVolume(float volume);
@@ -46,12 +51,16 @@ private:
 	Sound fx[MAX_SOUNDS];
     unsigned int fx_count;
 
+
+
 	unsigned int flipperHitFx;
 	unsigned int bumperHitFx;
 	unsigned int ballLostFx;
 	unsigned int bonusFx;
 	unsigned int comboCompleteFx;
 
+
+	// Volume settings
 	float masterVolume;
 	float sfxVolume;
 	float musicVolume;

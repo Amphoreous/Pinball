@@ -10,7 +10,7 @@ ModuleAudio::ModuleAudio(Application* app, bool start_enabled) : Module(app, sta
 {
 	fx_count = 0;
 	music = Music{ 0 };
-
+		
 	flipperHitFx = 0;
 	bumperHitFx = 0;
 	ballLostFx = 0;
@@ -152,14 +152,14 @@ bool ModuleAudio::PlayFx(unsigned int id, int repeat)
 	return ret;
 }
 
-void ModuleAudio::PlayFlipperHit()
+void ModuleAudio::PlayFlipperHit(float impactForce)
 {
-	PlayFx(flipperHitFx);
+	PlayFxWithVariation(flipperHitFx, impactForce); 
 }
 
-void ModuleAudio::PlayBumperHit()
+void ModuleAudio::PlayBumperHit(float impactForce)
 {
-	PlayFx(bumperHitFx);
+	PlayFxWithVariation(bumperHitFx, impactForce);
 }
 
 void ModuleAudio::PlayBonusSound()
@@ -175,6 +175,52 @@ void ModuleAudio::PlayComboComplete()
 void ModuleAudio::PlayBallLost()
 {
 	PlayFx(ballLostFx);
+}
+
+void ModuleAudio::PlayFxWithPitch(unsigned int id, float pitch)
+{
+	if (IsEnabled() == false || id == 0 || id > fx_count)
+		return;
+
+	if (pitch < 0.1f) pitch = 0.1f;
+	if (pitch > 2.0f) pitch = 2.0f;
+
+	SetSoundPitch(fx[id - 1], pitch);
+	PlayFx(id);
+	SetSoundPitch(fx[id - 1], 1.0f);
+}
+
+void ModuleAudio::PlayFxWithVolume(unsigned int id, float volume)
+{
+	if (IsEnabled() == false || id == 0 || id > fx_count)
+		return;
+
+	if (volume < 0.0f) volume = 0.0f;
+	if (volume > 1.0f) volume = 1.0f;
+
+	SetSoundVolume(fx[id - 1], volume * sfxVolume * masterVolume);
+	PlaySound(fx[id - 1]);
+}
+
+void ModuleAudio::PlayFxWithVariation(unsigned int id, float impactForce)
+{
+	if (IsEnabled() == false || id == 0 || id > fx_count)
+		return;
+
+	if (impactForce < 0.0f) impactForce = 0.0f;
+	if (impactForce > 1.0f) impactForce = 1.0f;
+
+	// Vary pitch: 0.8 to 1.2 based on impact
+	float pitch = 0.8f + (impactForce * 0.4f);
+
+	// Vary volume: 0.6 to 1.0 based on impact
+	float volume = 0.6f + (impactForce * 0.4f);
+
+	SetSoundPitch(fx[id - 1], pitch);
+	SetSoundVolume(fx[id - 1], volume * sfxVolume * masterVolume);
+	PlaySound(fx[id - 1]);
+
+	SetSoundPitch(fx[id - 1], 1.0f);
 }
 
 void ModuleAudio::SetMasterVolume(float volume)

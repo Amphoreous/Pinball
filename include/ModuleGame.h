@@ -11,6 +11,13 @@
 class PhysBody;
 class PhysicEntity;
 
+enum CollisionType
+{
+	COLLISION_WALL,
+	COLLISION_FLIPPER,
+	COLLISION_BUMPER,
+
+};
 
 class ModuleGame : public Module
 {
@@ -18,10 +25,14 @@ public:
 	ModuleGame(Application* app, bool start_enabled = true);
 	~ModuleGame();
 
+	float CalculateImpactForce(PhysBody* body);
+	CollisionType IdentifyCollision(PhysBody* bodyA, PhysBody* bodyB);
+
 	bool Start();
 	update_status Update();
 	bool CleanUp();
 	void OnCollision(PhysBody* bodyA, PhysBody* bodyB) override;
+
 
 public:
 	// Ball

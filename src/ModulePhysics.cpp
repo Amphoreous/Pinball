@@ -42,34 +42,70 @@ update_status ModulePhysics::PreUpdate()
 	// Handle mouse joint for dragging objects in debug mode
 	if(debug && mouse_joint == nullptr && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
 	{
+		// Use vector version to avoid any potential rounding differences
+		Vector2 mp = GetMousePosition();
 		b2Vec2 p;
 		// Convert screen coords to Box2D coords
-		p.x = GetMouseX() * PIXELS_TO_METERS;
-		p.y = (SCREEN_HEIGHT - GetMouseY()) * PIXELS_TO_METERS;
+		p.x = mp.x * PIXELS_TO_METERS;
+		p.y = (SCREEN_HEIGHT - mp.y) * PIXELS_TO_METERS;
 		
-		LOG("Mouse clicked at screen (%d, %d) -> Box2D (%.2f, %.2f)", GetMouseX(), GetMouseY(), p.x, p.y);
+		LOG("MOUSE CLICK: Screen(%.0f, %.0f) -> Box2D(%.2f, %.2f)", 
+			mp.x, mp.y, p.x, p.y);
 		
-		// Check if we clicked on a body
+		int bodyCount = 0;
+		b2Body* bestBody = nullptr;
+		float bestDist = 1e9f;
+		
+		// Check if we clicked on a body (robust picking: TestPoint, then circle-distance fallback)
 		for(b2Body* b = world->GetBodyList(); b; b = b->GetNext())
 		{
+			bodyCount++;
+			b2Vec2 pos = b->GetPosition();
+			LOG("Body #%d: type=%d, pos=(%.2f, %.2f)", 
+				bodyCount, (int)b->GetType(), pos.x, pos.y);
+			
 			if(b->GetType() == b2_dynamicBody)
 			{
+				LOG("  -> Dynamic body found!");
 				for(b2Fixture* f = b->GetFixtureList(); f; f = f->GetNext())
 				{
-					if(f->TestPoint(p))
+					bool hit = f->TestPoint(p);
+					
+					// If TestPoint missed, try a distance check for circle shapes (more tolerant)
+					if(!hit && f->GetShape()->GetType() == b2Shape::e_circle)
 					{
-						LOG("Clicked on dynamic body! Creating mouse joint.");
+						b2CircleShape* cs = (b2CircleShape*)f->GetShape();
+						b2Vec2 center = b->GetWorldPoint(cs->m_p);
+						float dist = b2Distance(center, p);
+						float tol = cs->m_radius + 0.10f; // 0.1m tolerance (~5px)
+						hit = dist <= tol;
+						LOG("  -> Circle dist=%.3f, radius=%.3f, tol=%.3f => %s", dist, cs->m_radius, tol, hit?"HIT":"miss");
+						if(!hit && dist < bestDist)
+						{
+							bestDist = dist;
+							bestBody = b;
+						}
+					}
+					else
+					{
+						LOG("  -> TestPoint result: %s", hit ? "HIT!" : "miss");
+					}
+					
+					if(hit)
+					{
+						LOG("SUCCESS! Creating mouse joint");
 						// Create mouse joint with proper parameters
 						b2MouseJointDef md;
 						md.bodyA = ground;
 						md.bodyB = b;
 						md.target = p;
 						md.collideConnected = true;
-						md.maxForce = 500.0f * b->GetMass();  // Increased force
-						md.stiffness = 20.0f;   // Spring stiffness (formerly frequencyHz * 2 * PI)
-						md.damping = 0.7f;       // Damping ratio
+						md.maxForce = 500.0f * b->GetMass();
+						md.stiffness = 20.0f;
+						md.damping = 0.7f;
 						mouse_joint = (b2MouseJoint*)world->CreateJoint(&md);
 						b->SetAwake(true);
+						LOG("Mouse joint created successfully!");
 						break;
 					}
 				}
@@ -77,9 +113,26 @@ update_status ModulePhysics::PreUpdate()
 			if(mouse_joint) break;
 		}
 		
+		// Fallback: if we didn't hit exactly, but we clicked close to a circle body, attach to the closest one within a reasonable range
+		if(!mouse_joint && bestBody && bestDist <= 0.45f) // ~22px
+		{
+			LOG("Fallback grab: closest circle at dist=%.3f m (<= 0.45)", bestDist);
+			b2MouseJointDef md;
+			md.bodyA = ground;
+			md.bodyB = bestBody;
+			md.target = p;
+			md.collideConnected = true;
+			md.maxForce = 500.0f * bestBody->GetMass();
+			md.stiffness = 20.0f;
+			md.damping = 0.7f;
+			mouse_joint = (b2MouseJoint*)world->CreateJoint(&md);
+			bestBody->SetAwake(true);
+			LOG("Mouse joint created via fallback proximity test.");
+		}
+		
 		if(!mouse_joint)
 		{
-			LOG("No dynamic body found at click position");
+			LOG("FAILED: No body was hit");
 		}
 	}
 	
@@ -119,6 +172,19 @@ update_status ModulePhysics::PostUpdate()
 
 	// Draw debug text
 	DrawText("DEBUG MODE (F1 to toggle) - Click and drag ball", 10, SCREEN_HEIGHT - 30, 20, RED);
+
+	// Visualize mouse position in both screen and world space for diagnostics
+	{
+		Vector2 mp = GetMousePosition();
+		b2Vec2 p;
+		p.x = mp.x * PIXELS_TO_METERS;
+		p.y = (SCREEN_HEIGHT - mp.y) * PIXELS_TO_METERS;
+		// Draw a small cross at the mouse position in screen space
+		DrawLine((int)mp.x - 6, (int)mp.y, (int)mp.x + 6, (int)mp.y, YELLOW);
+		DrawLine((int)mp.x, (int)mp.y - 6, (int)mp.x, (int)mp.y + 6, YELLOW);
+		// Also label the Box2D coords
+		DrawText(TextFormat("Mouse B2D: (%.2f, %.2f)", p.x, p.y), 10, SCREEN_HEIGHT - 55, 16, YELLOW);
+	}
 	
 	// Draw all Box2D shapes for debugging
 	for(b2Body* b = world->GetBodyList(); b; b = b->GetNext())

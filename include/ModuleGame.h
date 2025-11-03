@@ -60,6 +60,10 @@ public:
 	void SaveHighScore();
 	void LoadHighScore();
 
+	// TMX Map loading
+	bool LoadTMXMap(const char* filepath);
+	void CreateMapCollision();
+
 public:
 	// Game state system
 	GameData gameData;
@@ -90,4 +94,8 @@ public:
 	float kickerChargeTime = 0.0f;
 	const float MAX_KICKER_FORCE = 20.0f;
 	const float KICKER_CHARGE_SPEED = 10.0f;
+
+	// TMX Map data
+	std::vector<int> mapCollisionPoints;
+	PhysBody* mapBoundary = nullptr;
 };

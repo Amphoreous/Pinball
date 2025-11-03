@@ -29,22 +29,29 @@ bool ModuleGame::Start()
 
 	titleFont = font;
 
-	InitGameData(&gameData);
+	// Skip game state system - just play directly
+	// InitGameData(&gameData);
+	// LoadHighScore();
+	// LoadAudioSettings();
 
-	LoadHighScore();
+	// Load TMX map and create collision boundaries
+	if (LoadTMXMap("assets/map/Pinball_Table.tmx"))
+	{
+		CreateMapCollision();
+	}
+	else
+	{
+		LOG("Warning: Could not load TMX map, creating basic boundaries");
+		// Create basic pinball table boundaries as fallback
+		PhysBody* leftWall = App->physics->CreateRectangle(10, SCREEN_HEIGHT / 2, 20, SCREEN_HEIGHT, b2_staticBody);
+		PhysBody* rightWall = App->physics->CreateRectangle(SCREEN_WIDTH - 10, SCREEN_HEIGHT / 2, 20, SCREEN_HEIGHT, b2_staticBody);
+		PhysBody* bottomWall = App->physics->CreateRectangle(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 10, SCREEN_WIDTH, 20, b2_staticBody);
+		PhysBody* topWall = App->physics->CreateRectangle(SCREEN_WIDTH / 2, 10, SCREEN_WIDTH, 20, b2_staticBody);
+	}
 
-	LoadAudioSettings();
-
-	// Create pinball table boundaries
-	PhysBody* leftWall = App->physics->CreateRectangle(10, SCREEN_HEIGHT / 2, 20, SCREEN_HEIGHT, b2_staticBody);
-	PhysBody* rightWall = App->physics->CreateRectangle(SCREEN_WIDTH - 10, SCREEN_HEIGHT / 2, 20, SCREEN_HEIGHT, b2_staticBody);
-	PhysBody* bottomWall = App->physics->CreateRectangle(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 10, SCREEN_WIDTH, 20, b2_staticBody);
-	PhysBody* topWall = App->physics->CreateRectangle(SCREEN_WIDTH / 2, 10, SCREEN_WIDTH, 20, b2_staticBody);
-
-	// Create ball (initially inactive)
-	ball = App->physics->CreateCircle(SCREEN_WIDTH / 2, 100, 15, b2_dynamicBody);
+	// Create ball (starts enabled for debug/testing)
+	ball = App->physics->CreateCircle(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, 15, b2_dynamicBody);
 	ball->listener = this;
-	ball->body->SetEnabled(false);
 
 	LOG("Game initialized in MENU state");
 
@@ -65,61 +72,33 @@ bool ModuleGame::CleanUp()
 
 update_status ModuleGame::Update()
 {
-	// Toggle audio settings with F2
-	if (IsKeyPressed(KEY_F2))
+	// Simple direct play - no menu, no state system
+	
+	// Draw simple UI
+	DrawText("PINBALL - F1: Toggle Debug", 10, 10, 20, WHITE);
+	DrawText("Click and drag the ball!", 10, 40, 16, LIGHTGRAY);
+	
+	// Show mouse position for debugging
+	Vector2 mousePos = GetMousePosition();
+	DrawText(TextFormat("Mouse: (%.0f, %.0f)", mousePos.x, mousePos.y), 10, 70, 16, YELLOW);
+	
+	// Draw ball - LARGE and VISIBLE
+	if(ball)
 	{
-		showAudioSettings = !showAudioSettings;
+		int x, y;
+		ball->GetPosition(x, y);
+		
+		// Draw a big crosshair at ball position
+		DrawLine(x - 50, y, x + 50, y, RED);
+		DrawLine(x, y - 50, x, y + 50, RED);
+		
+		// Draw the ball itself - large and blue
+		DrawCircle(x, y, 15, BLUE);
+		
+		// Draw text showing position
+		DrawText(TextFormat("Ball: (%d, %d)", x, y), x + 20, y - 20, 16, YELLOW);
 	}
-
-	// Handle settings saved message timer
-	if (settingsSavedMessage)
-	{
-		settingsSavedTimer += GetFrameTime();
-		if (settingsSavedTimer >= 2.0f)
-		{
-			settingsSavedMessage = false;
-			settingsSavedTimer = 0.0f;
-		}
-	}
-
-	// Audio settings menu
-	if (showAudioSettings)
-	{
-		UpdateAudioSettings();
-		DrawAudioSettings();
-		return UPDATE_CONTINUE;
-	}
-
-	// Update game state logic
-	UpdateGameState(&gameData, GetFrameTime());
-
-	// State machine - dispatch to appropriate update function
-	switch (gameData.currentState)
-	{
-	case STATE_MENU:
-		UpdateMenuState();
-		RenderMenuState();
-		break;
-
-	case STATE_PLAYING:
-		UpdatePlayingState();
-		RenderPlayingState();
-		break;
-
-	case STATE_PAUSED:
-		UpdatePausedState();
-		RenderPausedState();
-		break;
-
-	case STATE_GAME_OVER:
-		UpdateGameOverState();
-		RenderGameOverState();
-		break;
-	}
-
-	// Global: Audio settings hint
-	DrawText("Press F2 for Audio Settings", 20, SCREEN_HEIGHT - 30, 16, DARKGRAY);
-
+	
 	return UPDATE_CONTINUE;
 }
 
@@ -641,5 +620,145 @@ void ModuleGame::LoadAudioSettings()
 	else
 	{
 		LOG("No saved audio settings, using defaults");
+	}
+}
+
+// ============================================================================
+// TMX MAP LOADING
+// ============================================================================
+
+bool ModuleGame::LoadTMXMap(const char* filepath)
+{
+	LOG("Loading TMX map: %s", filepath);
+
+	// Load the file
+	FILE* file = fopen(filepath, "r");
+	if (!file)
+	{
+		LOG("Failed to open TMX file: %s", filepath);
+		return false;
+	}
+
+	// Read entire file into memory
+	fseek(file, 0, SEEK_END);
+	long fileSize = ftell(file);
+	fseek(file, 0, SEEK_SET);
+
+	char* fileContent = (char*)malloc(fileSize + 1);
+	fread(fileContent, 1, fileSize, file);
+	fileContent[fileSize] = '\0';
+	fclose(file);
+
+	// Find the polyline points attribute
+	const char* polylineMarker = "<polyline points=\"";
+	char* polylineStart = strstr(fileContent, polylineMarker);
+
+	if (!polylineStart)
+	{
+		LOG("No polyline found in TMX file");
+		free(fileContent);
+		return false;
+	}
+
+	// Skip the marker
+	polylineStart += strlen(polylineMarker);
+
+	// Find the end quote
+	char* polylineEnd = strchr(polylineStart, '"');
+	if (!polylineEnd)
+	{
+		LOG("Malformed polyline in TMX file");
+		free(fileContent);
+		return false;
+	}
+
+	// Copy the points string
+	size_t pointsLen = polylineEnd - polylineStart;
+	char* pointsStr = (char*)malloc(pointsLen + 1);
+	strncpy(pointsStr, polylineStart, pointsLen);
+	pointsStr[pointsLen] = '\0';
+
+	// Parse the points
+	mapCollisionPoints.clear();
+
+	char* token = strtok(pointsStr, " ,");
+	while (token != NULL)
+	{
+		float value = (float)atof(token);
+		mapCollisionPoints.push_back((int)value);
+		token = strtok(NULL, " ,");
+	}
+
+	free(pointsStr);
+	free(fileContent);
+
+	LOG("Loaded %d collision points from TMX", (int)mapCollisionPoints.size());
+
+	return true;
+}
+
+void ModuleGame::CreateMapCollision()
+{
+	if (mapCollisionPoints.empty())
+	{
+		LOG("No map collision points to create");
+		return;
+	}
+
+	// The TMX map is 1280x1280 pixels (40x40 tiles at 32px each)
+	// Our screen is 720x1280 pixels (portrait)
+	// Scale to fit width: 720/1280 = 0.5625
+	float scale = 720.0f / 1280.0f;
+	
+	// The polyline in TMX has points ranging roughly from Y=-589 to Y=+514 (relative to object)
+	// Object is at (259, 767) in TMX coordinates
+	// This gives absolute Y range: 767-589=178 (top) to 767+514=1281 (bottom)
+	// After scaling: 178*0.5625=100 to 1281*0.5625=720
+	// Perfect! It fits our 720 height, but we need to shift it to fill the 1280 height
+	
+	// The polyline object starts at position (258.667, 766.667) in the TMX
+	int objectX = (int)(259 * scale);
+	
+	// Offset Y to center the map vertically in our taller screen
+	// TMX map height after scaling = 720 pixels
+	// Our screen height = 1280 pixels
+	// Vertical offset needed = (1280 - 720) / 2 = 280 pixels from bottom
+	int objectY = 1280 - (int)(767 * scale); // Start from bottom and offset up
+
+	LOG("Creating map collision with %d points", (int)mapCollisionPoints.size() / 2);
+	LOG("Scale factor: %.3f, Object origin: (%d, %d)", scale, objectX, objectY);
+
+	// Scale all the collision points (these are relative to object position)
+	std::vector<int> scaledPoints;
+	scaledPoints.reserve(mapCollisionPoints.size());
+	
+	for (size_t i = 0; i < mapCollisionPoints.size(); i += 2)
+	{
+		// Scale both X and Y coordinates
+		int scaledX = (int)(mapCollisionPoints[i] * scale);
+		int scaledY = (int)(mapCollisionPoints[i + 1] * scale);
+		
+		scaledPoints.push_back(scaledX);
+		scaledPoints.push_back(scaledY);
+	}
+
+	LOG("First 3 points (scaled): (%.1f,%.1f) (%.1f,%.1f) (%.1f,%.1f)", 
+		scaledPoints[0]*1.0f, scaledPoints[1]*1.0f,
+		scaledPoints[2]*1.0f, scaledPoints[3]*1.0f,
+		scaledPoints[4]*1.0f, scaledPoints[5]*1.0f);
+
+	// Create the chain collision with scaled points
+	mapBoundary = App->physics->CreateChain(objectX, objectY, 
+		scaledPoints.data(), 
+		(int)scaledPoints.size(), 
+		b2_staticBody);
+
+	if (mapBoundary)
+	{
+		LOG("Map collision created successfully with scaled coordinates");
+	}
+	else
+	{
+		LOG("Failed to create map collision");
 	}
 }

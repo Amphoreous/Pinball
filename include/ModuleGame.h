@@ -33,6 +33,10 @@ public:
 	bool CleanUp();
 	void OnCollision(PhysBody* bodyA, PhysBody* bodyB) override;
 
+	void DrawAudioSettings();
+	void UpdateAudioSettings();
+	void SaveAudioSettings();
+	void LoadAudioSettings();
 
 public:
 	// Ball
@@ -52,6 +56,10 @@ public:
 	// Game state
 	bool gameStarted = false;
 	bool roundActive = false;
+
+	bool showAudioSettings = false;
+	bool settingsSavedMessage = false;
+	float settingsSavedTimer = 0.0f;
 	
 	// Fonts for UI
 	Font font;

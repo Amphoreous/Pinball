@@ -229,7 +229,7 @@ void ModuleAudio::SetMasterVolume(float volume)
 	if (volume > 1.0f) volume = 1.0f;
 
 	masterVolume = volume;
-	SetMasterVolume(masterVolume);
+	::SetMasterVolume(masterVolume);
 
 	if (IsMusicValid(music))
 	{

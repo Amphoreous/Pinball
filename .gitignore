@@ -401,6 +401,7 @@ raylib-master
 external
 Makefile
 /*.sln
+*.dat
 
 # Vi and Vim
 *.swp

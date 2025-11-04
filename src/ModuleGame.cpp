@@ -912,11 +912,31 @@ void ModuleGame::CreateMapCollision()
 	scaledPoints.reserve(mapCollisionPoints.size());
 	for (size_t i = 0; i < mapCollisionPoints.size(); i += 2)
 	{
-		int scaledX = (int)(mapCollisionPoints[i] * scale);
-		int scaledY = (int)(mapCollisionPoints[i + 1] * scale);
+		int scaledX = (int)roundf(mapCollisionPoints[i] * scale);
+		int scaledY = (int)roundf(mapCollisionPoints[i + 1] * scale);
 		scaledPoints.push_back(scaledX);
 		scaledPoints.push_back(scaledY);
 	}
+	
+	// Compute bounding box center of the scaled polyline
+	int minX = INT_MAX, maxX = INT_MIN, minY = INT_MAX, maxY = INT_MIN;
+	for (size_t i = 0; i < scaledPoints.size(); i += 2)
+	{
+		int sx = scaledPoints[i];
+		int sy = scaledPoints[i + 1];
+		if (sx < minX) minX = sx;
+		if (sx > maxX) maxX = sx;
+		if (sy < minY) minY = sy;
+		if (sy > maxY) maxY = sy;
+	}
+	int polylineCenterX = (minX + maxX) / 2;
+	int polylineCenterY = (minY + maxY) / 2;
+	
+	// Position the chain body so the polyline's center aligns with screen center
+	int screenCenterX = SCREEN_WIDTH / 2;
+	int screenCenterY = SCREEN_HEIGHT / 2;
+	int objectX = screenCenterX - polylineCenterX;
+	int objectY = screenCenterY - polylineCenterY;
 
 	mapBoundary = App->physics->CreateChain(objectX, objectY,
 		scaledPoints.data(),

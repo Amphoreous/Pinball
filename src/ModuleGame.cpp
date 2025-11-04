@@ -28,6 +28,8 @@ bool ModuleGame::Start()
 	font = GetFontDefault();
 	titleFont = font;
 
+	LoadAudioSettings();
+
 	// Load all textures
 	backgroundTexture = LoadTexture("assets/background/BG.png");
 	ballTexture = LoadTexture("assets/balls/Planet1.png");
@@ -253,6 +255,31 @@ update_status ModuleGame::Update()
 		DrawText("LAUNCH POWER", 10, SCREEN_HEIGHT - 60, 16, WHITE);
 	}
 	
+	if (IsKeyPressed(KEY_F2))
+	{
+		showAudioSettings = !showAudioSettings;
+	}
+
+	// Handle settings saved message timer
+	if (settingsSavedMessage)
+	{
+		settingsSavedTimer += GetFrameTime();
+		if (settingsSavedTimer >= 2.0f)
+		{
+			settingsSavedMessage = false;
+			settingsSavedTimer = 0.0f;
+		}
+	}
+
+	if (showAudioSettings)
+	{
+		UpdateAudioSettings();
+		DrawAudioSettings();
+		return UPDATE_CONTINUE;
+	}
+
+	DrawText("Press F2 for Audio Settings", 20, SCREEN_HEIGHT - 80, 16, DARKGRAY);
+
 	return UPDATE_CONTINUE;
 }
 
@@ -277,6 +304,8 @@ void ModuleGame::UpdateMenuState()
 	{
 		// Game will handle quit in Application
 	}
+
+
 }
 
 void ModuleGame::RenderMenuState()

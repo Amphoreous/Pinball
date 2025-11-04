@@ -900,14 +900,15 @@ void ModuleGame::CreateMapCollision()
 		return;
 	}
 
-	// Portrait mode: 720x1280
-	// Map is 1280x1280, scale to fit width (720/1280 = 0.5625)
-	float scale = (float)SCREEN_WIDTH / 1280.0f;
+	// TMX map is 23×32 tiles at 32px/tile = 736×1024 pixels
+	// Polyline points are relative to object origin, already centered around (0,0)
+	const int TMX_MAP_W = 736;  // 23 * 32
+	const int TMX_MAP_H = 1024; // 32 * 32
+	
+	// Scale to fit screen width
+	float scale = (float)SCREEN_WIDTH / (float)TMX_MAP_W; // 720/736 ≈ 0.978
 
-	// Align using TMX object offsets (259, 767) scaled, plus slight downward offset
-	int objectX = (int)(259 * scale); // Start from left edge of scaled map
-	int objectY = 500; // Offset from top
-
+	// Scale polyline points (they're already relative/centered)
 	std::vector<int> scaledPoints;
 	scaledPoints.reserve(mapCollisionPoints.size());
 	for (size_t i = 0; i < mapCollisionPoints.size(); i += 2)
@@ -918,25 +919,10 @@ void ModuleGame::CreateMapCollision()
 		scaledPoints.push_back(scaledY);
 	}
 	
-	// Compute bounding box center of the scaled polyline
-	int minX = INT_MAX, maxX = INT_MIN, minY = INT_MAX, maxY = INT_MIN;
-	for (size_t i = 0; i < scaledPoints.size(); i += 2)
-	{
-		int sx = scaledPoints[i];
-		int sy = scaledPoints[i + 1];
-		if (sx < minX) minX = sx;
-		if (sx > maxX) maxX = sx;
-		if (sy < minY) minY = sy;
-		if (sy > maxY) maxY = sy;
-	}
-	int polylineCenterX = (minX + maxX) / 2;
-	int polylineCenterY = (minY + maxY) / 2;
-	
-	// Position the chain body so the polyline's center aligns with screen center
-	int screenCenterX = SCREEN_WIDTH / 2;
-	int screenCenterY = SCREEN_HEIGHT / 2;
-	int objectX = screenCenterX - polylineCenterX;
-	int objectY = screenCenterY - polylineCenterY;
+	// Place object origin at screen center
+	// (polyline points are relative to this origin)
+	int objectX = SCREEN_WIDTH / 2;
+	int objectY = SCREEN_HEIGHT / 2;
 
 	mapBoundary = App->physics->CreateChain(objectX, objectY,
 		scaledPoints.data(),

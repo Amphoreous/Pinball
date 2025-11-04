@@ -113,7 +113,8 @@ bool ModuleGame::Start()
 	}
 
 	// Create ball and prevent it from moving until game starts
-	ball = App->physics->CreateCircle(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, 15, b2_dynamicBody);
+	ball = App->physics->CreateCircle(2.48f * METERS_TO_PIXELS, SCREEN_HEIGHT - (7.44f * METERS_TO_PIXELS), 15, b2_dynamicBody);
+
 	if (ball)
 	{
 		ball->listener = this;
@@ -282,11 +283,11 @@ void ModuleGame::UpdateMenuState()
 		if (ball && ball->body)
 		{
 			ball->body->SetEnabled(true);
-			ball->body->SetTransform(b2Vec2((SCREEN_WIDTH / 2) * PIXELS_TO_METERS,
-				(SCREEN_HEIGHT - 100) * PIXELS_TO_METERS), 0);
+			ball->body->SetTransform(b2Vec2(2.48f, 7.44f), 0);
 			ball->body->SetLinearVelocity(b2Vec2(0, 0));
 			ball->body->SetAngularVelocity(0);
 		}
+
 		ballLaunched = false;
 	}
 
@@ -653,12 +654,12 @@ void ModuleGame::LoseBall()
 
 	if (ball && ball->body)
 	{
-		ball->body->SetTransform(b2Vec2((SCREEN_WIDTH / 2) * PIXELS_TO_METERS,
-			(SCREEN_HEIGHT - 100) * PIXELS_TO_METERS), 0);
+		ball->body->SetTransform(b2Vec2(2.48f, 7.44f), 0);
 		ball->body->SetLinearVelocity(b2Vec2(0, 0));
 		ball->body->SetAngularVelocity(0);
 		ball->body->SetEnabled(false);
 	}
+
 
 	ballLaunched = false;
 
@@ -905,7 +906,7 @@ void ModuleGame::CreateMapCollision()
 
 	// Align using TMX object offsets (259, 767) scaled, plus slight downward offset
 	int objectX = (int)(259 * scale); // Start from left edge of scaled map
-	int objectY = 100; // Offset from top
+	int objectY = 500; // Offset from top
 
 	std::vector<int> scaledPoints;
 	scaledPoints.reserve(mapCollisionPoints.size());

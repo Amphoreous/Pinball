@@ -67,37 +67,41 @@ public:
 
 public:
 	// Game state system
-	GameData gameData;
+	GameData gameData = {}; // initialized to avoid warnings
 
 	// Physics bodies
 	PhysBody* ball = nullptr;
 	PhysBody* leftFlipper = nullptr;
 	PhysBody* rightFlipper = nullptr;
 	PhysBody* kicker = nullptr;
-	
-	// Flipper joints
+
+	// Flipper joints (may be nullptr)
 	b2RevoluteJoint* leftFlipperJoint = nullptr;
 	b2RevoluteJoint* rightFlipperJoint = nullptr;
-	
-	// Bumpers
+
+	// Bumpers / other bodies
 	std::vector<PhysBody*> bumpers;
 
-	// Textures
-	Texture2D ballTexture;
-	Texture2D backgroundTexture;
-	Texture2D flipperTexture;
-	Texture2D flipperBaseTexture;
-	Texture2D bumper1Texture;
-	Texture2D bumper2Texture;
-	Texture2D bumper3Texture;
-	Texture2D piece1Texture;
-	Texture2D piece2Texture;
+	// Textures (initialized to zero to avoid uninitialized warnings)
+	Texture2D ballTexture = { 0 };
+	Texture2D backgroundTexture = { 0 };
+	Texture2D flipperTexture = { 0 };
+	Texture2D flipperBaseTexture = { 0 };
+	Texture2D bumper1Texture = { 0 };
+	Texture2D bumper2Texture = { 0 };
+	Texture2D bumper3Texture = { 0 };
+	Texture2D piece1Texture = { 0 };
+	Texture2D piece2Texture = { 0 };
 
-	// UI elements
-	Font font;
-	Font titleFont;
+	// UI textures (start menu / pause)
+	Texture2D titleTexture = { 0 };
 
-	// Audio settings UI
+	// Fonts / UI
+	Font font = { 0 };
+	Font titleFont = { 0 };
+
+	// Debug & UI toggles
+	bool showDebug = false;
 	bool showAudioSettings = false;
 	bool settingsSavedMessage = false;
 	float settingsSavedTimer = 0.0f;
@@ -109,7 +113,7 @@ public:
 	const float MAX_KICKER_FORCE = 20.0f;
 	const float KICKER_CHARGE_SPEED = 10.0f;
 
-	// TMX Map data
+	// TMX Map data & collision boundary
 	std::vector<int> mapCollisionPoints;
 	PhysBody* mapBoundary = nullptr;
 };

@@ -112,6 +112,9 @@ public:
 	float kickerChargeTime = 0.0f;
 	const float MAX_KICKER_FORCE = 20.0f;
 	const float KICKER_CHARGE_SPEED = 10.0f;
+	
+	// Sound effects (loaded once, played multiple times)
+	int bumperHitSfx = -1;
 
 	// TMX Map data & collision boundary
 	std::vector<int> mapCollisionPoints;

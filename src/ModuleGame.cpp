@@ -60,21 +60,43 @@ bool ModuleGame::Start()
 
 	// Fonts
 	font = GetFontDefault();
-	titleFont = LoadFont("assets/fonts/your_font.ttf"); // Cambia por tu fuente si tienes
+	titleFont = GetFontDefault(); // Use default font instead of loading
 
-	// Load textures
+	// Load textures with error checking
 	backgroundTexture = LoadTexture("assets/background/BG.png");
+	if(backgroundTexture.id == 0) LOG("Warning: Failed to load background texture");
+	
 	ballTexture = LoadTexture("assets/balls/Planet1.png");
+	if(ballTexture.id == 0) LOG("Warning: Failed to load ball texture");
+	
 	flipperTexture = LoadTexture("assets/flippers/flipper bat.png");
+	if(flipperTexture.id == 0) LOG("Warning: Failed to load flipper texture");
+	
 	flipperBaseTexture = LoadTexture("assets/flippers/Base Flipper Bat.png");
+	if(flipperBaseTexture.id == 0) LOG("Warning: Failed to load flipper base texture");
+	
 	bumper1Texture = LoadTexture("assets/bumpers/bumper1.png");
+	if(bumper1Texture.id == 0) LOG("Warning: Failed to load bumper1 texture");
+	
 	bumper2Texture = LoadTexture("assets/bumpers/bumper2.png");
+	if(bumper2Texture.id == 0) LOG("Warning: Failed to load bumper2 texture");
+	
 	bumper3Texture = LoadTexture("assets/bumpers/bumper3.png");
+	if(bumper3Texture.id == 0) LOG("Warning: Failed to load bumper3 texture");
+	
 	piece1Texture = LoadTexture("assets/extra/piece1.png");
+	if(piece1Texture.id == 0) LOG("Warning: Failed to load piece1 texture");
+	
 	piece2Texture = LoadTexture("assets/extra/piece2.png");
+	if(piece2Texture.id == 0) LOG("Warning: Failed to load piece2 texture");
 
-	// Menu UI assets
+	// Load title texture
 	titleTexture = LoadTexture("assets/UI/title.png");
+	if(titleTexture.id == 0) LOG("Warning: Failed to load title texture");
+	
+	// Load sound effects ONCE (not every collision!)
+	bumperHitSfx = App->audio->LoadFx("assets/audio/bumper_hit.wav");
+	LOG("Loaded bumper hit sound effect: %d", bumperHitSfx);
 
 	// Load saved preferences
 	LoadAudioSettings();
@@ -426,7 +448,7 @@ void ModuleGame::RenderPlayingState()
 	}
 
 	// Draw flippers
-	if (leftFlipper)
+	if (leftFlipper && leftFlipper->body)
 	{
 		int x, y;
 		leftFlipper->GetPosition(x, y);
@@ -455,7 +477,7 @@ void ModuleGame::RenderPlayingState()
 		}
 	}
 
-	if (rightFlipper)
+	if (rightFlipper && rightFlipper->body)
 	{
 		int x, y;
 		rightFlipper->GetPosition(x, y);
@@ -485,7 +507,7 @@ void ModuleGame::RenderPlayingState()
 	}
 
 	// Ball drawing
-	if (ball)
+	if (ball && ball->body)
 	{
 		int x, y;
 		ball->GetPosition(x, y);
@@ -658,13 +680,26 @@ void ModuleGame::LoadHighScore()
 	FILE* file = fopen("highscore.dat", "rb");
 	if (file)
 	{
-		fread(&gameData.highestScore, sizeof(int), 1, file);
+		int loadedScore = 0;
+		size_t read = fread(&loadedScore, sizeof(int), 1, file);
 		fclose(file);
-		LOG("High score loaded: %d", gameData.highestScore);
+		
+		// Validate the loaded score (prevent corruption)
+		if (read == 1 && loadedScore >= 0 && loadedScore < 10000000)
+		{
+			gameData.highestScore = loadedScore;
+			LOG("High score loaded: %d", gameData.highestScore);
+		}
+		else
+		{
+			gameData.highestScore = 0;
+			LOG("Invalid high score in file, reset to 0");
+		}
 	}
 	else
 	{
 		gameData.highestScore = 0;
+		LOG("No high score file found, starting at 0");
 	}
 }
 
@@ -695,14 +730,20 @@ void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
 	{
 		if (bodyA == bumpers[i] || bodyB == bumpers[i])
 		{
-			if (ball && (bodyA == ball || bodyB == ball))
+			if (ball && ball->body && (bodyA == ball || bodyB == ball))
 			{
 				b2Vec2 vel = ball->body->GetLinearVelocity();
 				vel *= 1.3f;
 				ball->body->SetLinearVelocity(vel);
-				int fx = App->audio->LoadFx("assets/audio/bumper_hit.wav");
-				if (fx >= 0) App->audio->PlayFx(fx);
+				
+				// Play pre-loaded sound effect
+				if (bumperHitSfx >= 0) 
+				{
+					App->audio->PlayFx(bumperHitSfx);
+				}
+				
 				gameData.currentScore += 50;
+				LOG("Bumper hit! Score: %d", gameData.currentScore);
 			}
 			break;
 		}

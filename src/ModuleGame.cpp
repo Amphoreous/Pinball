@@ -121,8 +121,10 @@ bool ModuleGame::Start()
 			ball->body->SetEnabled(false);
 	}
 
-	// Example bumpers (you probably have original placements from TMX)
-	PhysBody* b1 = App->physics->CreateCircle(500, 200, 30, b2_staticBody);
+	// Example bumpers - positioned for portrait mode relative to screen
+	int centerX = SCREEN_WIDTH / 2;
+	int bumperY = 300; // near upper area
+	PhysBody* b1 = App->physics->CreateCircle(centerX - 80, bumperY + 30, 30, b2_staticBody);
 	if (b1)
 	{
 		if (b1->body && b1->body->GetFixtureList())
@@ -130,7 +132,7 @@ bool ModuleGame::Start()
 		b1->listener = this;
 		bumpers.push_back(b1);
 	}
-	PhysBody* b2 = App->physics->CreateCircle(640, 180, 30, b2_staticBody);
+	PhysBody* b2 = App->physics->CreateCircle(centerX, bumperY, 30, b2_staticBody);
 	if (b2)
 	{
 		if (b2->body && b2->body->GetFixtureList())
@@ -138,7 +140,7 @@ bool ModuleGame::Start()
 		b2->listener = this;
 		bumpers.push_back(b2);
 	}
-	PhysBody* b3 = App->physics->CreateCircle(780, 200, 30, b2_staticBody);
+	PhysBody* b3 = App->physics->CreateCircle(centerX + 80, bumperY + 30, 30, b2_staticBody);
 	if (b3)
 	{
 		if (b3->body && b3->body->GetFixtureList())
@@ -147,9 +149,12 @@ bool ModuleGame::Start()
 		bumpers.push_back(b3);
 	}
 
-	// Create flippers through ModulePhysics helper
-	leftFlipperJoint = App->physics->CreateFlipper(450, 600, 80, 20, true, &leftFlipper);
-	rightFlipperJoint = App->physics->CreateFlipper(830, 600, 80, 20, false, &rightFlipper);
+	// Create flippers - position near bottom relative to height
+	int flipperY = SCREEN_HEIGHT - 180;
+	int leftX = (int)(SCREEN_WIDTH * 0.35f);
+	int rightX = (int)(SCREEN_WIDTH * 0.65f);
+	leftFlipperJoint = App->physics->CreateFlipper(leftX, flipperY, 80, 20, true, &leftFlipper);
+	rightFlipperJoint = App->physics->CreateFlipper(rightX, flipperY, 80, 20, false, &rightFlipper);
 	if (leftFlipper) leftFlipper->listener = this;
 	if (rightFlipper) rightFlipper->listener = this;
 
@@ -295,7 +300,13 @@ void ModuleGame::UpdateMenuState()
 void ModuleGame::RenderMenuState()
 {
 	if (backgroundTexture.id)
-		DrawTexture(backgroundTexture, 0, 0, WHITE);
+	{
+		// Scale background to fill portrait screen
+		Rectangle src = { 0, 0, (float)backgroundTexture.width, (float)backgroundTexture.height };
+		Rectangle dst = { 0, 0, (float)SCREEN_WIDTH, (float)SCREEN_HEIGHT };
+		Vector2 origin = { 0, 0 };
+		DrawTexturePro(backgroundTexture, src, dst, origin, 0.0f, WHITE);
+	}
 	else
 		ClearBackground(Color{ 20,30,50,255 });
 
@@ -390,7 +401,12 @@ void ModuleGame::RenderPlayingState()
 {
 	// Background
 	if (backgroundTexture.id)
-		DrawTexture(backgroundTexture, 0, 0, WHITE);
+	{
+		Rectangle src = { 0, 0, (float)backgroundTexture.width, (float)backgroundTexture.height };
+		Rectangle dst = { 0, 0, (float)SCREEN_WIDTH, (float)SCREEN_HEIGHT };
+		Vector2 origin = { 0, 0 };
+		DrawTexturePro(backgroundTexture, src, dst, origin, 0.0f, WHITE);
+	}
 	else
 		ClearBackground(Color{ 15,25,40,255 });
 
@@ -582,7 +598,12 @@ void ModuleGame::RenderGameOverState()
 {
 	// Background
 	if (backgroundTexture.id)
-		DrawTexture(backgroundTexture, 0, 0, WHITE);
+	{
+		Rectangle src = { 0, 0, (float)backgroundTexture.width, (float)backgroundTexture.height };
+		Rectangle dst = { 0, 0, (float)SCREEN_WIDTH, (float)SCREEN_HEIGHT };
+		Vector2 origin = { 0, 0 };
+		DrawTexturePro(backgroundTexture, src, dst, origin, 0.0f, WHITE);
+	}
 	else
 		ClearBackground(Color{ 30, 10, 10, 255 });
 
@@ -878,9 +899,13 @@ void ModuleGame::CreateMapCollision()
 		return;
 	}
 
-	float scale = 720.0f / 1280.0f;
-	int objectX = 280 + (int)(259 * scale);
-	int objectY = SCREEN_HEIGHT - (int)(767 * scale) + 100;
+	// Portrait mode: 720x1280
+	// Map is 1280x1280, scale to fit width (720/1280 = 0.5625)
+	float scale = (float)SCREEN_WIDTH / 1280.0f;
+
+	// Align using TMX object offsets (259, 767) scaled, plus slight downward offset
+	int objectX = (int)(259 * scale); // Start from left edge of scaled map
+	int objectY = 100; // Offset from top
 
 	std::vector<int> scaledPoints;
 	scaledPoints.reserve(mapCollisionPoints.size());

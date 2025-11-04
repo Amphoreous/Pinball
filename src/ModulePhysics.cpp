@@ -36,8 +36,10 @@ bool ModulePhysics::Start()
 
 update_status ModulePhysics::PreUpdate()
 {
-	// Step the physics world
-	world->Step(1.0f / 60.0f, 8, 3);
+	// Step the physics world with higher iterations for better collision detection
+	// velocityIterations: 10 (increased from 8)
+	// positionIterations: 8 (increased from 3)
+	world->Step(1.0f / 60.0f, 10, 8);
 	
 	// Handle mouse joint for dragging objects in debug mode
 	if(debug && mouse_joint == nullptr && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
@@ -285,6 +287,9 @@ PhysBody* ModulePhysics::CreateCircle(int x, int y, int radius, b2BodyType type)
 	// Convert screen coords to Box2D coords
 	body.position.Set(x * PIXELS_TO_METERS, (SCREEN_HEIGHT - y) * PIXELS_TO_METERS);
 	
+	// Enable CCD (Continuous Collision Detection) to prevent tunneling
+	body.bullet = true;
+	
 	b2Body* b = world->CreateBody(&body);
 	
 	b2CircleShape shape;
@@ -383,10 +388,13 @@ PhysBody* ModulePhysics::CreateChain(int x, int y, const int* points, int size, 
 		p[i].y = -points[i * 2 + 1] * PIXELS_TO_METERS;
 	}
 	
-	shape.CreateLoop(p, size / 2);
+	// Use CreateChain (open) instead of CreateLoop (closed) for pinball boundaries
+	shape.CreateChain(p, size / 2, b2Vec2(0,0), b2Vec2(0,0));
 	
 	b2FixtureDef fixture;
 	fixture.shape = &shape;
+	fixture.friction = 0.3f;      // Add friction to chain
+	fixture.restitution = 0.4f;   // Add some bounce to walls
 	
 	b->CreateFixture(&fixture);
 	

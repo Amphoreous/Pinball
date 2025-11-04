@@ -74,19 +74,50 @@ update_status ModuleGame::Update()
 {
 	// Simple direct play - no menu, no state system
 	
+	// Ball launch control with DOWN arrow
+	if (IsKeyDown(KEY_DOWN) && !ballLaunched)
+	{
+		kickerChargeTime += GetFrameTime();
+		kickerForce = MIN(kickerChargeTime * KICKER_CHARGE_SPEED, MAX_KICKER_FORCE);
+	}
+
+	if (IsKeyReleased(KEY_DOWN) && !ballLaunched)
+	{
+		LaunchBall();
+	}
+	
 	// Draw simple UI
 	DrawText("PINBALL - F1: Toggle Debug", 10, 10, 20, WHITE);
 	DrawText("Click and drag the ball!", 10, 40, 16, LIGHTGRAY);
+	DrawText("DOWN Arrow - Launch Ball (hold)", 10, 60, 16, LIGHTGRAY);
 	
 	// Show mouse position for debugging
 	Vector2 mousePos = GetMousePosition();
-	DrawText(TextFormat("Mouse: (%.0f, %.0f)", mousePos.x, mousePos.y), 10, 70, 16, YELLOW);
+	DrawText(TextFormat("Mouse: (%.0f, %.0f)", mousePos.x, mousePos.y), 10, 90, 16, YELLOW);
+	
+	// Kicker charge indicator (when charging)
+	if (IsKeyDown(KEY_DOWN) && !ballLaunched)
+	{
+		float chargePercent = kickerForce / MAX_KICKER_FORCE;
+		int barWidth = (int)(200 * chargePercent);
+		DrawRectangle(10, 620, barWidth, 20, GREEN);
+		DrawRectangleLines(10, 620, 200, 20, WHITE);
+		DrawText("LAUNCH POWER", 10, 600, 16, WHITE);
+	}
 	
 	// Draw ball - LARGE and VISIBLE
 	if(ball)
 	{
 		int x, y;
 		ball->GetPosition(x, y);
+		
+		// Get raw Box2D position for debugging
+		b2Vec2 box2dPos = ball->body->GetPosition();
+		
+		// Draw text showing ALL position info
+		DrawText(TextFormat("Ball Screen: (%d, %d)", x, y), 10, 120, 16, YELLOW);
+		DrawText(TextFormat("Ball Box2D: (%.2f, %.2f)", box2dPos.x, box2dPos.y), 10, 140, 16, SKYBLUE);
+		DrawText(TextFormat("Expected Screen Y: %d", (int)(SCREEN_HEIGHT - box2dPos.y * 50)), 10, 160, 16, PINK);
 		
 		// Draw a big crosshair at ball position
 		DrawLine(x - 50, y, x + 50, y, RED);
@@ -95,8 +126,8 @@ update_status ModuleGame::Update()
 		// Draw the ball itself - large and blue
 		DrawCircle(x, y, 15, BLUE);
 		
-		// Draw text showing position
-		DrawText(TextFormat("Ball: (%d, %d)", x, y), x + 20, y - 20, 16, YELLOW);
+		// Draw text showing position AT the ball
+		DrawText(TextFormat("(%d, %d)", x, y), x + 20, y - 20, 16, WHITE);
 	}
 	
 	return UPDATE_CONTINUE;
@@ -706,24 +737,18 @@ void ModuleGame::CreateMapCollision()
 	}
 
 	// The TMX map is 1280x1280 pixels (40x40 tiles at 32px each)
-	// Our screen is 720x1280 pixels (portrait)
-	// Scale to fit width: 720/1280 = 0.5625
+	// Our screen is 1280x720 pixels (landscape)
+	// Scale to fit height: 720/1280 = 0.5625
 	float scale = 720.0f / 1280.0f;
 	
-	// The polyline in TMX has points ranging roughly from Y=-589 to Y=+514 (relative to object)
-	// Object is at (259, 767) in TMX coordinates
-	// This gives absolute Y range: 767-589=178 (top) to 767+514=1281 (bottom)
-	// After scaling: 178*0.5625=100 to 1281*0.5625=720
-	// Perfect! It fits our 720 height, but we need to shift it to fill the 1280 height
-	
 	// The polyline object starts at position (258.667, 766.667) in the TMX
-	int objectX = (int)(259 * scale);
+	// After scaling, the map becomes 720x720 pixels
+	// Center horizontally: offset X by (1280 - 720) / 2 = 280 pixels
+	int objectX = 280 + (int)(259 * scale);
 	
-	// Offset Y to center the map vertically in our taller screen
-	// TMX map height after scaling = 720 pixels
-	// Our screen height = 1280 pixels
-	// Vertical offset needed = (1280 - 720) / 2 = 280 pixels from bottom
-	int objectY = 1280 - (int)(767 * scale); // Start from bottom and offset up
+	// For Y, push map down by adding extra offset (100 pixels down from fitted position)
+	// Box2D uses Y-up, screen uses Y-down, so we flip and add offset
+	int objectY = SCREEN_HEIGHT - (int)(767 * scale) + 100;
 
 	LOG("Creating map collision with %d points", (int)mapCollisionPoints.size() / 2);
 	LOG("Scale factor: %.3f, Object origin: (%d, %d)", scale, objectX, objectY);

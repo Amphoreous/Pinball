@@ -520,8 +520,8 @@ void ModuleGame::UpdatePausedState()
 		TransitionToState(&gameData, STATE_PLAYING);
 	}
 
-	// Return to menu with ESC
-	if (IsKeyPressed(KEY_ESCAPE))
+	// Return to menu with M
+	if (IsKeyPressed(KEY_M))
 	{
 		TransitionToState(&gameData, STATE_MENU);
 		if (ball && ball->body) ball->body->SetEnabled(false);
@@ -541,7 +541,7 @@ void ModuleGame::RenderPausedState()
 	DrawText(pauseText, SCREEN_WIDTH / 2 - textWidth / 2, 200, 80, YELLOW);
 
 	DrawText("Press P or SPACE to Resume", SCREEN_WIDTH / 2 - 180, 350, 25, WHITE);
-	DrawText("Press ESC to Main Menu", SCREEN_WIDTH / 2 - 150, 400, 25, LIGHTGRAY);
+	DrawText("Press M to Main Menu", SCREEN_WIDTH / 2 - 150, 400, 25, LIGHTGRAY);
 }
 
 // ============================================================================

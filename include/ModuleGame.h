@@ -9,6 +9,7 @@
 
 class PhysBody;
 class PhysicEntity;
+class b2RevoluteJoint;
 
 enum CollisionType
 {
@@ -73,11 +74,24 @@ public:
 	PhysBody* leftFlipper = nullptr;
 	PhysBody* rightFlipper = nullptr;
 	PhysBody* kicker = nullptr;
+	
+	// Flipper joints
+	b2RevoluteJoint* leftFlipperJoint = nullptr;
+	b2RevoluteJoint* rightFlipperJoint = nullptr;
+	
+	// Bumpers
+	std::vector<PhysBody*> bumpers;
 
 	// Textures
 	Texture2D ballTexture;
 	Texture2D backgroundTexture;
-	Texture2D logoTexture;
+	Texture2D flipperTexture;
+	Texture2D flipperBaseTexture;
+	Texture2D bumper1Texture;
+	Texture2D bumper2Texture;
+	Texture2D bumper3Texture;
+	Texture2D piece1Texture;
+	Texture2D piece2Texture;
 
 	// UI elements
 	Font font;

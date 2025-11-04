@@ -25,6 +25,9 @@ public:
 	PhysBody* CreateRectangleSensor(int x, int y, int width, int height);
 	PhysBody* CreateChain(int x, int y, const int* points, int size, b2BodyType type = b2_staticBody);
 	
+	// Create flipper with revolute joint
+	b2RevoluteJoint* CreateFlipper(int x, int y, int width, int height, bool isLeft, PhysBody** outBody);
+	
 	// Collision callbacks from b2ContactListener
 	void BeginContact(b2Contact* contact) override;
 	void EndContact(b2Contact* contact) override;

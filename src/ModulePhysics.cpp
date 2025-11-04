@@ -442,6 +442,59 @@ PhysBody* ModulePhysics::CreateChain(int x, int y, const int* points, int size, 
 	return pbody;
 }
 
+b2RevoluteJoint* ModulePhysics::CreateFlipper(int x, int y, int width, int height, bool isLeft, PhysBody** outBody)
+{
+	// Create anchor point (static)
+	PhysBody* anchor = CreateCircle(x, y, 5, b2_staticBody);
+	
+	// Create flipper body (dynamic rectangle)
+	PhysBody* flipper = CreateRectangle(x, y, width, height, b2_dynamicBody);
+	flipper->body->SetGravityScale(0); // Flippers don't fall
+	
+	// Set high density for more impact force
+	for(b2Fixture* f = flipper->body->GetFixtureList(); f; f = f->GetNext())
+	{
+		f->SetDensity(3.0f);
+		f->SetRestitution(0.8f);
+	}
+	flipper->body->ResetMassData();
+	
+	// Create revolute joint
+	b2RevoluteJointDef jointDef;
+	jointDef.bodyA = anchor->body;
+	jointDef.bodyB = flipper->body;
+	
+	// Set anchor point (left side of flipper for left flipper, right side for right flipper)
+	if(isLeft)
+		jointDef.localAnchorB.Set(-width * PIXELS_TO_METERS * 0.4f, 0);
+	else
+		jointDef.localAnchorB.Set(width * PIXELS_TO_METERS * 0.4f, 0);
+	
+	jointDef.localAnchorA.Set(0, 0);
+	jointDef.enableLimit = true;
+	
+	// Set angle limits
+	if(isLeft)
+	{
+		jointDef.lowerAngle = -30 * DEGTORAD; // -30 degrees
+		jointDef.upperAngle = 30 * DEGTORAD;  // +30 degrees
+	}
+	else
+	{
+		jointDef.lowerAngle = -30 * DEGTORAD;
+		jointDef.upperAngle = 30 * DEGTORAD;
+	}
+	
+	jointDef.maxMotorTorque = 1000.0f; // Strong motor
+	jointDef.motorSpeed = 0.0f;
+	jointDef.enableMotor = true;
+	
+	b2RevoluteJoint* joint = (b2RevoluteJoint*)world->CreateJoint(&jointDef);
+	
+	*outBody = flipper;
+	return joint;
+}
+
 void ModulePhysics::BeginContact(b2Contact* contact)
 {
 	PhysBody* physA = (PhysBody*)contact->GetFixtureA()->GetBody()->GetUserData().pointer;

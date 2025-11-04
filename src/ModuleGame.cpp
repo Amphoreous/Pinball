@@ -26,13 +26,20 @@ bool ModuleGame::Start()
 	bool ret = true;
 
 	font = GetFontDefault();
-
 	titleFont = font;
 
-	// Skip game state system - just play directly
-	// InitGameData(&gameData);
-	// LoadHighScore();
-	// LoadAudioSettings();
+	// Load all textures
+	backgroundTexture = LoadTexture("assets/background/BG.png");
+	ballTexture = LoadTexture("assets/balls/Planet1.png");
+	flipperTexture = LoadTexture("assets/flippers/flipper bat.png");
+	flipperBaseTexture = LoadTexture("assets/flippers/Base Flipper Bat.png");
+	bumper1Texture = LoadTexture("assets/bumpers/bumper1.png");
+	bumper2Texture = LoadTexture("assets/bumpers/bumper2.png");
+	bumper3Texture = LoadTexture("assets/bumpers/bumper3.png");
+	piece1Texture = LoadTexture("assets/extra/piece1.png");
+	piece2Texture = LoadTexture("assets/extra/piece2.png");
+	
+	LOG("Textures loaded successfully");
 
 	// Load TMX map and create collision boundaries
 	if (LoadTMXMap("assets/map/Pinball_Table.tmx"))
@@ -42,18 +49,37 @@ bool ModuleGame::Start()
 	else
 	{
 		LOG("Warning: Could not load TMX map, creating basic boundaries");
-		// Create basic pinball table boundaries as fallback
-		PhysBody* leftWall = App->physics->CreateRectangle(10, SCREEN_HEIGHT / 2, 20, SCREEN_HEIGHT, b2_staticBody);
-		PhysBody* rightWall = App->physics->CreateRectangle(SCREEN_WIDTH - 10, SCREEN_HEIGHT / 2, 20, SCREEN_HEIGHT, b2_staticBody);
-		PhysBody* bottomWall = App->physics->CreateRectangle(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 10, SCREEN_WIDTH, 20, b2_staticBody);
-		PhysBody* topWall = App->physics->CreateRectangle(SCREEN_WIDTH / 2, 10, SCREEN_WIDTH, 20, b2_staticBody);
 	}
 
-	// Create ball (starts enabled for debug/testing)
+	// Create ball (starts enabled for debug/testing) - larger radius for better collision
 	ball = App->physics->CreateCircle(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, 15, b2_dynamicBody);
 	ball->listener = this;
+	
+	// Create bumpers (positioned based on typical pinball layout)
+	// Top bumpers
+	PhysBody* bumper1 = App->physics->CreateCircle(500, 200, 30, b2_staticBody);
+	bumper1->body->GetFixtureList()->SetRestitution(1.5f); // Extra bouncy!
+	bumper1->listener = this;
+	bumpers.push_back(bumper1);
+	
+	PhysBody* bumper2 = App->physics->CreateCircle(640, 180, 30, b2_staticBody);
+	bumper2->body->GetFixtureList()->SetRestitution(1.5f);
+	bumper2->listener = this;
+	bumpers.push_back(bumper2);
+	
+	PhysBody* bumper3 = App->physics->CreateCircle(780, 200, 30, b2_staticBody);
+	bumper3->body->GetFixtureList()->SetRestitution(1.5f);
+	bumper3->listener = this;
+	bumpers.push_back(bumper3);
 
-	LOG("Game initialized in MENU state");
+	// Create flippers at bottom of screen
+	leftFlipperJoint = App->physics->CreateFlipper(450, 600, 80, 20, true, &leftFlipper);
+	rightFlipperJoint = App->physics->CreateFlipper(830, 600, 80, 20, false, &rightFlipper);
+	
+	leftFlipper->listener = this;
+	rightFlipper->listener = this;
+
+	LOG("Game initialized successfully");
 
 	return ret;
 }
@@ -64,15 +90,43 @@ bool ModuleGame::CleanUp()
 
 	SaveHighScore();
 
-	// TODO: Unload textures
-	// UnloadTexture(ballTexture);
+	// Unload all textures
+	UnloadTexture(backgroundTexture);
+	UnloadTexture(ballTexture);
+	UnloadTexture(flipperTexture);
+	UnloadTexture(flipperBaseTexture);
+	UnloadTexture(bumper1Texture);
+	UnloadTexture(bumper2Texture);
+	UnloadTexture(bumper3Texture);
+	UnloadTexture(piece1Texture);
+	UnloadTexture(piece2Texture);
 
 	return true;
 }
 
 update_status ModuleGame::Update()
 {
-	// Simple direct play - no menu, no state system
+	// Draw background
+	DrawTexture(backgroundTexture, 0, 0, WHITE);
+	
+	// Flipper controls
+	if(IsKeyDown(KEY_LEFT) && leftFlipperJoint)
+	{
+		leftFlipperJoint->SetMotorSpeed(-20.0f); // Rotate up
+	}
+	else if(leftFlipperJoint)
+	{
+		leftFlipperJoint->SetMotorSpeed(10.0f); // Return to rest position
+	}
+	
+	if(IsKeyDown(KEY_RIGHT) && rightFlipperJoint)
+	{
+		rightFlipperJoint->SetMotorSpeed(20.0f); // Rotate up
+	}
+	else if(rightFlipperJoint)
+	{
+		rightFlipperJoint->SetMotorSpeed(-10.0f); // Return to rest position
+	}
 	
 	// Ball launch control with DOWN arrow
 	if (IsKeyDown(KEY_DOWN) && !ballLaunched)
@@ -86,48 +140,117 @@ update_status ModuleGame::Update()
 		LaunchBall();
 	}
 	
-	// Draw simple UI
-	DrawText("PINBALL - F1: Toggle Debug", 10, 10, 20, WHITE);
-	DrawText("Click and drag the ball!", 10, 40, 16, LIGHTGRAY);
-	DrawText("DOWN Arrow - Launch Ball (hold)", 10, 60, 16, LIGHTGRAY);
+	// Draw bumpers with textures (scaled to match physics size)
+	for(size_t i = 0; i < bumpers.size(); i++)
+	{
+		int x, y;
+		bumpers[i]->GetPosition(x, y);
+		
+		Texture2D* bumperTex = nullptr;
+		if(i == 0) bumperTex = &bumper1Texture;
+		else if(i == 1) bumperTex = &bumper2Texture;
+		else bumperTex = &bumper3Texture;
+		
+		if(bumperTex)
+		{
+			// Scale bumper to 60x60 pixels (physics radius is 30)
+			float scale = 60.0f / bumperTex->width;
+			int width = (int)(bumperTex->width * scale);
+			int height = (int)(bumperTex->height * scale);
+			
+			Rectangle source = {0, 0, (float)bumperTex->width, (float)bumperTex->height};
+			Rectangle dest = {(float)x, (float)y, (float)width, (float)height};
+			Vector2 origin = {width/2.0f, height/2.0f};
+			DrawTexturePro(*bumperTex, source, dest, origin, 0, WHITE);
+		}
+	}
 	
-	// Show mouse position for debugging
-	Vector2 mousePos = GetMousePosition();
-	DrawText(TextFormat("Mouse: (%.0f, %.0f)", mousePos.x, mousePos.y), 10, 90, 16, YELLOW);
+	// Draw flippers with textures (scaled appropriately)
+	if(leftFlipper)
+	{
+		int x, y;
+		leftFlipper->GetPosition(x, y);
+		float angle = leftFlipper->body->GetAngle() * RADTODEG;
+		
+		// Scale flipper base to 30x30 pixels
+		float baseScale = 30.0f / flipperBaseTexture.width;
+		int baseWidth = (int)(flipperBaseTexture.width * baseScale);
+		int baseHeight = (int)(flipperBaseTexture.height * baseScale);
+		
+		Rectangle baseSource = {0, 0, (float)flipperBaseTexture.width, (float)flipperBaseTexture.height};
+		Rectangle baseDest = {(float)x, (float)y, (float)baseWidth, (float)baseHeight};
+		Vector2 baseOrigin = {baseWidth/2.0f, baseHeight/2.0f};
+		DrawTexturePro(flipperBaseTexture, baseSource, baseDest, baseOrigin, 0, WHITE);
+		
+		// Scale flipper bat to 80x20 pixels (matches physics)
+		float batScale = 80.0f / flipperTexture.width;
+		int batWidth = (int)(flipperTexture.width * batScale);
+		int batHeight = (int)(flipperTexture.height * batScale);
+		
+		Rectangle source = {0, 0, (float)flipperTexture.width, (float)flipperTexture.height};
+		Rectangle dest = {(float)x, (float)y, (float)batWidth, (float)batHeight};
+		Vector2 origin = {batWidth * 0.2f, batHeight/2.0f};
+		DrawTexturePro(flipperTexture, source, dest, origin, angle, WHITE);
+	}
+	
+	if(rightFlipper)
+	{
+		int x, y;
+		rightFlipper->GetPosition(x, y);
+		float angle = rightFlipper->body->GetAngle() * RADTODEG;
+		
+		// Scale flipper base to 30x30 pixels
+		float baseScale = 30.0f / flipperBaseTexture.width;
+		int baseWidth = (int)(flipperBaseTexture.width * baseScale);
+		int baseHeight = (int)(flipperBaseTexture.height * baseScale);
+		
+		Rectangle baseSource = {0, 0, (float)flipperBaseTexture.width, (float)flipperBaseTexture.height};
+		Rectangle baseDest = {(float)x, (float)y, (float)baseWidth, (float)baseHeight};
+		Vector2 baseOrigin = {baseWidth/2.0f, baseHeight/2.0f};
+		DrawTexturePro(flipperBaseTexture, baseSource, baseDest, baseOrigin, 0, WHITE);
+		
+		// Scale flipper bat to 80x20 pixels (matches physics)
+		float batScale = 80.0f / flipperTexture.width;
+		int batWidth = (int)(flipperTexture.width * batScale);
+		int batHeight = (int)(flipperTexture.height * batScale);
+		
+		Rectangle source = {0, 0, (float)flipperTexture.width, (float)flipperTexture.height};
+		Rectangle dest = {(float)x, (float)y, (float)batWidth, (float)batHeight};
+		Vector2 origin = {batWidth * 0.8f, batHeight/2.0f};
+		DrawTexturePro(flipperTexture, source, dest, origin, angle, WHITE);
+	}
+	
+	// Draw ball with planet texture (scaled to match physics size)
+	if(ball)
+	{
+		int x, y;
+		ball->GetPosition(x, y);
+		
+		// Scale ball to 30x30 pixels (physics radius is 15)
+		float scale = 30.0f / ballTexture.width;
+		int width = (int)(ballTexture.width * scale);
+		int height = (int)(ballTexture.height * scale);
+		
+		Rectangle source = {0, 0, (float)ballTexture.width, (float)ballTexture.height};
+		Rectangle dest = {(float)x, (float)y, (float)width, (float)height};
+		Vector2 origin = {width/2.0f, height/2.0f};
+		DrawTexturePro(ballTexture, source, dest, origin, 0, WHITE);
+	}
+	
+	// Draw UI
+	DrawText("SPACE PINBALL", 10, 10, 30, WHITE);
+	DrawText("LEFT/RIGHT Arrow - Flippers", 10, 45, 16, LIGHTGRAY);
+	DrawText("DOWN Arrow - Launch Ball (hold)", 10, 65, 16, LIGHTGRAY);
+	DrawText("F1 - Toggle Debug", 10, 85, 16, LIGHTGRAY);
 	
 	// Kicker charge indicator (when charging)
 	if (IsKeyDown(KEY_DOWN) && !ballLaunched)
 	{
 		float chargePercent = kickerForce / MAX_KICKER_FORCE;
 		int barWidth = (int)(200 * chargePercent);
-		DrawRectangle(10, 620, barWidth, 20, GREEN);
-		DrawRectangleLines(10, 620, 200, 20, WHITE);
-		DrawText("LAUNCH POWER", 10, 600, 16, WHITE);
-	}
-	
-	// Draw ball - LARGE and VISIBLE
-	if(ball)
-	{
-		int x, y;
-		ball->GetPosition(x, y);
-		
-		// Get raw Box2D position for debugging
-		b2Vec2 box2dPos = ball->body->GetPosition();
-		
-		// Draw text showing ALL position info
-		DrawText(TextFormat("Ball Screen: (%d, %d)", x, y), 10, 120, 16, YELLOW);
-		DrawText(TextFormat("Ball Box2D: (%.2f, %.2f)", box2dPos.x, box2dPos.y), 10, 140, 16, SKYBLUE);
-		DrawText(TextFormat("Expected Screen Y: %d", (int)(SCREEN_HEIGHT - box2dPos.y * 50)), 10, 160, 16, PINK);
-		
-		// Draw a big crosshair at ball position
-		DrawLine(x - 50, y, x + 50, y, RED);
-		DrawLine(x, y - 50, x, y + 50, RED);
-		
-		// Draw the ball itself - large and blue
-		DrawCircle(x, y, 15, BLUE);
-		
-		// Draw text showing position AT the ball
-		DrawText(TextFormat("(%d, %d)", x, y), x + 20, y - 20, 16, WHITE);
+		DrawRectangle(10, SCREEN_HEIGHT - 40, barWidth, 20, GREEN);
+		DrawRectangleLines(10, SCREEN_HEIGHT - 40, 200, 20, WHITE);
+		DrawText("LAUNCH POWER", 10, SCREEN_HEIGHT - 60, 16, WHITE);
 	}
 	
 	return UPDATE_CONTINUE;
@@ -490,41 +613,22 @@ CollisionType ModuleGame::IdentifyCollision(PhysBody* bodyA, PhysBody* bodyB)
 
 void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
 {
-	// Only process collisions during playing state
-	if (gameData.currentState != STATE_PLAYING)
-		return;
-
-	float impactForce = CalculateImpactForce(bodyA);
-	CollisionType type = IdentifyCollision(bodyA, bodyB);
-
-	switch (type)
+	// Check if ball hit a bumper
+	for(size_t i = 0; i < bumpers.size(); i++)
 	{
-	case COLLISION_FLIPPER:
-		App->audio->PlayFlipperHit(impactForce);
-		gameData.currentScore += 10;
-		break;
-
-	case COLLISION_BUMPER:
-		App->audio->PlayBumperHit(impactForce);
-		gameData.currentScore += 50;
-		break;
-
-	case COLLISION_TARGET:
-		App->audio->PlayBonusSound();
-		gameData.currentScore += 100;
-		break;
-
-	case COLLISION_COMBO_LETTER:
-		// TODO: Identify which letter and add to combo
-		// AddComboLetter('P');
-		break;
-
-	case COLLISION_WALL:
-	default:
-		// Soft wall collision sound
-		App->audio->PlayBumperHit(impactForce * 0.3f);
-		gameData.currentScore += 5;
-		break;
+		if(bodyA == bumpers[i] || bodyB == bumpers[i])
+		{
+			// Ball hit bumper - apply extra impulse!
+			PhysBody* ballBody = (bodyA == ball) ? bodyA : bodyB;
+			if(ballBody == ball)
+			{
+				b2Vec2 vel = ball->body->GetLinearVelocity();
+				vel *= 1.3f; // Boost the velocity by 30%
+				ball->body->SetLinearVelocity(vel);
+				LOG("Bumper hit! Boosting ball velocity");
+			}
+			break;
+		}
 	}
 }
 

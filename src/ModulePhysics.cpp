@@ -36,6 +36,23 @@ bool ModulePhysics::Start()
 
 update_status ModulePhysics::PreUpdate()
 {
+	// Limit velocity of dynamic bodies to prevent tunneling
+	const float MAX_VELOCITY = 30.0f; // 30 m/s (~1500 pixels/s)
+	for(b2Body* b = world->GetBodyList(); b; b = b->GetNext())
+	{
+		if(b->GetType() == b2_dynamicBody)
+		{
+			b2Vec2 vel = b->GetLinearVelocity();
+			float speed = vel.Length();
+			if(speed > MAX_VELOCITY)
+			{
+				vel.Normalize();
+				vel *= MAX_VELOCITY;
+				b->SetLinearVelocity(vel);
+			}
+		}
+	}
+	
 	// Step the physics world with higher iterations for better collision detection
 	// velocityIterations: 10 (increased from 8)
 	// positionIterations: 8 (increased from 3)
@@ -247,6 +264,18 @@ update_status ModulePhysics::PostUpdate()
 					}
 				}
 				break;
+				
+				case b2Shape::e_edge:
+				{
+					b2EdgeShape* shape = (b2EdgeShape*)f->GetShape();
+					b2Vec2 v1 = b->GetWorldPoint(shape->m_vertex1);
+					b2Vec2 v2 = b->GetWorldPoint(shape->m_vertex2);
+					
+					DrawLine((int)(v1.x * METERS_TO_PIXELS), (int)(SCREEN_HEIGHT - v1.y * METERS_TO_PIXELS),
+					        (int)(v2.x * METERS_TO_PIXELS), (int)(SCREEN_HEIGHT - v2.y * METERS_TO_PIXELS), 
+					        Color{0, 255, 0, 255});
+				}
+				break;
 			}
 		}
 	}
@@ -378,7 +407,7 @@ PhysBody* ModulePhysics::CreateChain(int x, int y, const int* points, int size, 
 	
 	b2Body* b = world->CreateBody(&body);
 	
-	b2ChainShape shape;
+	// Convert all points to Box2D coordinates
 	b2Vec2* p = new b2Vec2[size / 2];
 	
 	for(uint i = 0; i < size / 2; ++i)
@@ -388,15 +417,21 @@ PhysBody* ModulePhysics::CreateChain(int x, int y, const int* points, int size, 
 		p[i].y = -points[i * 2 + 1] * PIXELS_TO_METERS;
 	}
 	
-	// Use CreateChain (open) instead of CreateLoop (closed) for pinball boundaries
-	shape.CreateChain(p, size / 2, b2Vec2(0,0), b2Vec2(0,0));
-	
+	// Create individual edge shapes (two-sided) instead of chain shape (one-sided)
+	// This allows collision from both sides and prevents tunneling better
 	b2FixtureDef fixture;
-	fixture.shape = &shape;
-	fixture.friction = 0.3f;      // Add friction to chain
-	fixture.restitution = 0.4f;   // Add some bounce to walls
+	fixture.friction = 0.3f;
+	fixture.restitution = 0.4f;
 	
-	b->CreateFixture(&fixture);
+	for(uint i = 0; i < size / 2 - 1; ++i)
+	{
+		b2EdgeShape edge;
+		edge.SetTwoSided(p[i], p[i + 1]);
+		edge.m_radius = 0.01f; // Thick edges: 0.4m = ~20 pixels
+		
+		fixture.shape = &edge;
+		b->CreateFixture(&fixture);
+	}
 	
 	delete[] p;
 	

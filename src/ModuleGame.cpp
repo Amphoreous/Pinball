@@ -911,18 +911,29 @@ void ModuleGame::CreateMapCollision()
 	// Scale polyline points (they're already relative/centered)
 	std::vector<int> scaledPoints;
 	scaledPoints.reserve(mapCollisionPoints.size());
+	
+	// First pass: scale points and find their bounding box
+	int minX = INT_MAX, maxX = INT_MIN, minY = INT_MAX, maxY = INT_MIN;
 	for (size_t i = 0; i < mapCollisionPoints.size(); i += 2)
 	{
 		int scaledX = (int)roundf(mapCollisionPoints[i] * scale);
 		int scaledY = (int)roundf(mapCollisionPoints[i + 1] * scale);
 		scaledPoints.push_back(scaledX);
 		scaledPoints.push_back(scaledY);
+		
+		if (scaledX < minX) minX = scaledX;
+		if (scaledX > maxX) maxX = scaledX;
+		if (scaledY < minY) minY = scaledY;
+		if (scaledY > maxY) maxY = scaledY;
 	}
 	
-	// Place object origin at screen center
-	// (polyline points are relative to this origin)
-	int objectX = SCREEN_WIDTH / 2;
-	int objectY = SCREEN_HEIGHT / 2;
+	// Calculate the center of the polyline's bounding box
+	int polylineCenterX = (minX + maxX) / 2;
+	int polylineCenterY = (minY + maxY) / 2;
+	
+	// Place object origin so that the polyline center ends up at screen center
+	int objectX = (SCREEN_WIDTH / 2) - polylineCenterX;
+	int objectY = (SCREEN_HEIGHT / 2) - polylineCenterY;
 
 	mapBoundary = App->physics->CreateChain(objectX, objectY,
 		scaledPoints.data(),

@@ -14,6 +14,7 @@ ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start
     leftFlipper = nullptr;
     rightFlipper = nullptr;
     kicker = nullptr;
+    ballLossSensor = nullptr;
 
     leftFlipperJoint = nullptr;
     rightFlipperJoint = nullptr;
@@ -47,6 +48,8 @@ ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start
     scoreFlashTimer = 0.0f;
     scoreFlashActive = false;
     lastScoreIncrease = 0;
+
+    ballLossTimer = 0.0f;
 }
 
 ModuleGame::~ModuleGame()
@@ -95,10 +98,10 @@ bool ModuleGame::Start()
     if (titleTexture.id == 0) LOG("Warning: Failed to load title texture");
 
     bumperHitSfx = App->audio->LoadFx("assets/audio/bumper_hit.wav");
-    // Preload a dedicated launch sound to avoid reloading on each launch
-    launchSfx    = App->audio->LoadFx("assets/audio/flipper_hit.wav");
+    launchSfx = App->audio->LoadFx("assets/audio/flipper_hit.wav");
     targetHitSfx = App->audio->LoadFx("assets/audio/target_hit.wav");
     specialHitSfx = App->audio->LoadFx("assets/audio/bonus_sound.wav");
+    ballLostSfx = App->audio->LoadFx("assets/audio/flipper_hit.wav");
 
     LoadAudioSettings();
     LoadHighScore();
@@ -174,10 +177,32 @@ bool ModuleGame::Start()
     if (leftFlipper) leftFlipper->listener = this;
     if (rightFlipper) rightFlipper->listener = this;
 
+    CreateBallLossSensor();
+
     InitGameData(&gameData);
 
     LOG("ModuleGame Start complete");
     return ret;
+}
+
+void ModuleGame::CreateBallLossSensor()
+{
+    int sensorWidth = 400;
+    int sensorHeight = 20;
+    int sensorX = SCREEN_WIDTH / 2;
+    int sensorY = SCREEN_HEIGHT - 50;
+
+    ballLossSensor = App->physics->CreateRectangleSensor(sensorX, sensorY, sensorWidth, sensorHeight);
+
+    if (ballLossSensor)
+    {
+        ballLossSensor->listener = this;
+        LOG("Ball loss sensor created successfully");
+    }
+    else
+    {
+        LOG("Warning: Failed to create ball loss sensor");
+    }
 }
 
 bool ModuleGame::CleanUp()
@@ -211,8 +236,19 @@ bool ModuleGame::CleanUp()
 
 update_status ModuleGame::Update()
 {
+    float dt = GetFrameTime();
+
+    if (ballLossTimer > 0)
+    {
+        ballLossTimer -= dt;
+        if (ballLossTimer <= 0)
+        {
+            LoseBall();
+        }
+    }
+
     if (scoreFlashActive) {
-        scoreFlashTimer += GetFrameTime();
+        scoreFlashTimer += dt;
         if (scoreFlashTimer >= 0.5f) {
             scoreFlashActive = false;
             scoreFlashTimer = 0.0f;
@@ -269,7 +305,7 @@ update_status ModuleGame::Update()
 
     if (settingsSavedMessage)
     {
-        settingsSavedTimer += GetFrameTime();
+        settingsSavedTimer += dt;
         if (settingsSavedTimer >= 2.0f)
         {
             settingsSavedMessage = false;
@@ -349,6 +385,9 @@ float ModuleGame::CalculateImpactForce(PhysBody* body)
 
 CollisionType ModuleGame::IdentifyCollision(PhysBody* bodyA, PhysBody* bodyB)
 {
+    if (bodyA == ballLossSensor || bodyB == ballLossSensor)
+        return COLLISION_BALL_LOSS_SENSOR;
+
     for (size_t i = 0; i < bumpers.size(); ++i)
     {
         if (bodyA == bumpers[i] || bodyB == bumpers[i])
@@ -375,14 +414,21 @@ CollisionType ModuleGame::IdentifyCollision(PhysBody* bodyA, PhysBody* bodyB)
 
 void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
 {
-    CollisionType type = IdentifyCollision(bodyA, bodyB);
+    if (!bodyA || !bodyB) return;
 
+    CollisionType type = IdentifyCollision(bodyA, bodyB);
     bool ballInvolved = (bodyA == ball || bodyB == ball);
 
-    if (ballInvolved)
+    if (ballInvolved && gameData.currentState == STATE_PLAYING)
     {
         switch (type)
         {
+        case COLLISION_BALL_LOSS_SENSOR:
+        {
+            ballLossTimer = 0.1f;
+            break;
+        }
+
         case COLLISION_BUMPER:
         {
             if (ball && ball->body)
@@ -458,10 +504,6 @@ void ModuleGame::UpdateMenuState()
         }
 
         ballLaunched = false;
-    }
-
-    if (IsKeyPressed(KEY_ESCAPE))
-    {
     }
 }
 
@@ -547,14 +589,6 @@ void ModuleGame::UpdatePlayingState()
         else
             rightFlipperJoint->SetMotorSpeed(-10.0f);
     }
-
-    if (ball)
-    {
-        int x, y;
-        ball->GetPosition(x, y);
-        if (y > SCREEN_HEIGHT + 50)
-            LoseBall();
-    }
 }
 
 void ModuleGame::RenderPlayingState()
@@ -608,6 +642,16 @@ void ModuleGame::RenderPlayingState()
         DrawText("CHARGING...", SCREEN_WIDTH / 2 - 80, SCREEN_HEIGHT - 100, 25, YELLOW);
         DrawRectangle(SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT - 60, 200, 20, DARKGRAY);
         DrawRectangle(SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT - 60, (int)(200 * chargePercent), 20, GREEN);
+    }
+
+    if (showDebug && ballLossSensor)
+    {
+        int x, y;
+        ballLossSensor->GetPosition(x, y);
+        DrawRectangle(x - ballLossSensor->width / 2, y - ballLossSensor->height / 2,
+            ballLossSensor->width, ballLossSensor->height,
+            Color{ 255, 0, 0, 100 });
+        DrawText("BALL LOSS SENSOR", x - 80, y - 20, 12, RED);
     }
 
     for (size_t i = 0; i < bumpers.size(); ++i)
@@ -792,10 +836,26 @@ void ModuleGame::RenderPausedState()
 
 void ModuleGame::UpdateGameOverState()
 {
-    if (IsKeyPressed(KEY_SPACE))
+    if (IsKeyPressed(KEY_M))
     {
         TransitionToState(&gameData, STATE_MENU);
         if (ball && ball->body) ball->body->SetEnabled(false);
+    }
+
+    if (IsKeyPressed(KEY_R))
+    {
+        ResetGame(&gameData);
+        TransitionToState(&gameData, STATE_PLAYING);
+
+        if (ball && ball->body)
+        {
+            ball->body->SetEnabled(true);
+            ball->body->SetTransform(b2Vec2(2.48f, 7.44f), 0);
+            ball->body->SetLinearVelocity(b2Vec2(0, 0));
+            ball->body->SetAngularVelocity(0);
+        }
+
+        ballLaunched = false;
     }
 }
 
@@ -826,7 +886,8 @@ void ModuleGame::RenderGameOverState()
     DrawText(TextFormat("High Score: %d", gameData.highestScore),
         SCREEN_WIDTH / 2 - 140, 380, 30, YELLOW);
 
-    DrawText("Press SPACE to Main Menu", SCREEN_WIDTH / 2 - 180, 500, 25, SKYBLUE);
+    DrawText("Press M to Main Menu", SCREEN_WIDTH / 2 - 150, 450, 25, SKYBLUE);
+    DrawText("Press R to Restart", SCREEN_WIDTH / 2 - 150, 500, 25, GREEN);
 }
 
 void ModuleGame::LaunchBall()
@@ -845,24 +906,65 @@ void ModuleGame::LaunchBall()
     if (launchSfx >= 0) App->audio->PlayFx(launchSfx);
 }
 
-void ModuleGame::LoseBall()
+void ModuleGame::RespawnBall()
 {
-    LOG("Ball lost!");
+    LOG("Respawning ball");
 
-    App->audio->PlayBallLost();
-
-    if (ball && ball->body)
+    if (!ball || !ball->body)
     {
-        ball->body->SetTransform(b2Vec2(2.48f, 7.44f), 0);
-        ball->body->SetLinearVelocity(b2Vec2(0, 0));
-        ball->body->SetAngularVelocity(0);
-        ball->body->SetEnabled(false);
+        LOG("Error: Ball or ball body is null");
+        return;
     }
+
+    ball->body->SetTransform(b2Vec2(2.48f, 7.44f), 0);
+    ball->body->SetLinearVelocity(b2Vec2(0, 0));
+    ball->body->SetAngularVelocity(0);
+    ball->body->SetEnabled(true);
 
     ballLaunched = false;
     ResetScoreMultipliers();
 
-    ResetRound(&gameData);
+    LOG("Ball respawned successfully");
+}
+
+void ModuleGame::LoseBall()
+{
+    LOG("Processing ball loss");
+
+    if (ballLostSfx >= 0)
+    {
+        App->audio->PlayFx(ballLostSfx);
+    }
+
+    gameData.ballsLeft--;
+
+    LOG("Balls left: %d", gameData.ballsLeft);
+
+    if (gameData.ballsLeft > 0)
+    {
+        RespawnBall();
+    }
+    else
+    {
+        LOG("Game Over - No balls left");
+
+        gameData.previousScore = gameData.currentScore;
+
+        if (gameData.currentScore > gameData.highestScore)
+        {
+            gameData.highestScore = gameData.currentScore;
+            gameData.scoreNeedsSaving = true;
+        }
+
+        TransitionToState(&gameData, STATE_GAME_OVER);
+
+        if (ball && ball->body)
+        {
+            ball->body->SetEnabled(false);
+        }
+
+        ballLaunched = false;
+    }
 }
 
 void ModuleGame::AddComboLetter(char letter)

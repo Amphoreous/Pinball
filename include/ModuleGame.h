@@ -67,6 +67,9 @@ public:
     void CreateMapCollision();
     void CreateBallLossSensor();
 
+    void PauseGame();
+    void ResumeGame();
+
 public:
     GameData gameData = {};
 
@@ -125,4 +128,11 @@ public:
     int lastScoreIncrease = 0;
 
     float ballLossTimer = 0.0f;
+
+    float ballSavedPosX, ballSavedPosY;
+    float ballSavedVelX, ballSavedVelY;
+    float ballSavedAngularVel;
+    bool ballSavedAwake;
+
+    bool isGamePaused = false;
 };

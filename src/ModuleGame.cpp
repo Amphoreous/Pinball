@@ -6,7 +6,8 @@
 #include "ModulePhysics.h"
 #include "PhysBody.h"
 #include "GameState.h"
-#include <string.h>
+#include <string>
+#include <cstring>
 
 ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start_enabled)
 {
@@ -50,7 +51,16 @@ ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start
     lastScoreIncrease = 0;
 
     ballLossTimer = 0.0f;
+
+    ballSavedPosX = 0.0f;
+    ballSavedPosY = 0.0f;
+    ballSavedVelX = 0.0f;
+    ballSavedVelY = 0.0f;
+    ballSavedAngularVel = 0.0f;
+    ballSavedAwake = false;
+    isGamePaused = false;
 }
+
 
 ModuleGame::~ModuleGame()
 {
@@ -234,6 +244,49 @@ bool ModuleGame::CleanUp()
 
     return true;
 }
+
+void ModuleGame::PauseGame()
+{
+    if (isGamePaused) return;
+
+    isGamePaused = true;
+
+    if (ball && ball->body)
+    {
+        b2Vec2 position = ball->body->GetPosition();
+        b2Vec2 velocity = ball->body->GetLinearVelocity();
+
+        ballSavedPosX = position.x;
+        ballSavedPosY = position.y;
+        ballSavedVelX = velocity.x;
+        ballSavedVelY = velocity.y;
+        ballSavedAngularVel = ball->body->GetAngularVelocity();
+        ballSavedAwake = ball->body->IsAwake();
+
+        ball->body->SetType(b2_staticBody);
+    }
+}
+
+void ModuleGame::ResumeGame()
+{
+    if (!isGamePaused) return;
+
+    isGamePaused = false;
+
+    if (ball && ball->body)
+    {
+        ball->body->SetType(b2_dynamicBody);
+        ball->body->SetTransform(b2Vec2(ballSavedPosX, ballSavedPosY), 0);
+        ball->body->SetLinearVelocity(b2Vec2(ballSavedVelX, ballSavedVelY));
+        ball->body->SetAngularVelocity(ballSavedAngularVel);
+
+        if (ballSavedAwake) {
+            ball->body->SetAwake(true);
+        }
+    }
+}
+
+
 
 update_status ModuleGame::Update()
 {
@@ -561,21 +614,22 @@ void ModuleGame::UpdatePlayingState()
 {
     if (IsKeyPressed(KEY_P))
     {
+        PauseGame();
         TransitionToState(&gameData, STATE_PAUSED);
         return;
     }
 
-    if (IsKeyDown(KEY_DOWN) && !ballLaunched)
+    if (IsKeyDown(KEY_DOWN) && !ballLaunched && !isGamePaused)
     {
         kickerChargeTime += GetFrameTime();
         kickerForce = MIN(kickerChargeTime * KICKER_CHARGE_SPEED, MAX_KICKER_FORCE);
     }
-    if (IsKeyReleased(KEY_DOWN) && !ballLaunched)
+    if (IsKeyReleased(KEY_DOWN) && !ballLaunched && !isGamePaused)
     {
         LaunchBall();
     }
 
-    if (leftFlipperJoint)
+    if (leftFlipperJoint && !isGamePaused)
     {
         if (IsKeyDown(KEY_LEFT))
             leftFlipperJoint->SetMotorSpeed(-20.0f);
@@ -583,7 +637,7 @@ void ModuleGame::UpdatePlayingState()
             leftFlipperJoint->SetMotorSpeed(10.0f);
     }
 
-    if (rightFlipperJoint)
+    if (rightFlipperJoint && !isGamePaused)
     {
         if (IsKeyDown(KEY_RIGHT))
             rightFlipperJoint->SetMotorSpeed(20.0f);
@@ -591,6 +645,7 @@ void ModuleGame::UpdatePlayingState()
             rightFlipperJoint->SetMotorSpeed(-10.0f);
     }
 }
+
 
 void ModuleGame::RenderPlayingState()
 {
@@ -811,13 +866,32 @@ void ModuleGame::UpdatePausedState()
 {
     if (IsKeyPressed(KEY_P) || IsKeyPressed(KEY_SPACE))
     {
+        ResumeGame();
         TransitionToState(&gameData, STATE_PLAYING);
     }
 
     if (IsKeyPressed(KEY_M))
     {
+        ResumeGame();
         TransitionToState(&gameData, STATE_MENU);
         if (ball && ball->body) ball->body->SetEnabled(false);
+    }
+
+    if (IsKeyPressed(KEY_R))
+    {
+        ResumeGame();
+        ResetGame(&gameData);
+        TransitionToState(&gameData, STATE_PLAYING);
+
+        if (ball && ball->body)
+        {
+            ball->body->SetEnabled(true);
+            ball->body->SetTransform(b2Vec2(2.48f, 7.44f), 0);
+            ball->body->SetLinearVelocity(b2Vec2(0, 0));
+            ball->body->SetAngularVelocity(0);
+        }
+
+        ballLaunched = false;
     }
 }
 
@@ -832,7 +906,8 @@ void ModuleGame::RenderPausedState()
     DrawText(pauseText, SCREEN_WIDTH / 2 - textWidth / 2, 200, 80, YELLOW);
 
     DrawText("Press P or SPACE to Resume", SCREEN_WIDTH / 2 - 180, 350, 25, WHITE);
-    DrawText("Press M to Main Menu", SCREEN_WIDTH / 2 - 150, 400, 25, LIGHTGRAY);
+    DrawText("Press R to Restart", SCREEN_WIDTH / 2 - 150, 400, 25, GREEN);
+    DrawText("Press M to Main Menu", SCREEN_WIDTH / 2 - 150, 450, 25, LIGHTGRAY);
 }
 
 void ModuleGame::UpdateGameOverState()

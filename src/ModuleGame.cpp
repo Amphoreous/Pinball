@@ -106,7 +106,6 @@ bool ModuleGame::Start()
     LoadAudioSettings();
     LoadHighScore();
 
-    // Usamos el TMX solo para las colisiones de la "Capa de Objetos 1"
     if (LoadTMXMap("assets/map/Pinball_Table.tmx"))
     {
         CreateMapCollision();
@@ -180,6 +179,47 @@ bool ModuleGame::Start()
 
     CreateBallLossSensor();
 
+    LOG("Creating black holes...");
+
+    const int TMX_MAP_W = 1280;
+    const int TMX_MAP_H = 1600;
+    float scaleX = (float)SCREEN_WIDTH / (float)TMX_MAP_W;
+    float scaleY = (float)SCREEN_HEIGHT / (float)TMX_MAP_H;
+
+    float bh1_tmx_cx = 288.0f + (96.0f / 2.0f);
+    float bh1_tmx_cy = 864.0f + (96.0f / 2.0f);
+    float bh1_tmx_radius = 96.0f / 2.0f;
+
+    int bh1_screen_x = (int)roundf(bh1_tmx_cx * scaleX);
+    int bh1_screen_y = (int)roundf(bh1_tmx_cy * scaleY);
+    int bh1_screen_radius = (int)roundf(bh1_tmx_radius * scaleX);
+
+    LOG("BH1 TMX(%.0f, %.0f, r=%.0f) -> Screen(%d, %d, r=%d)", bh1_tmx_cx, bh1_tmx_cy, bh1_tmx_radius, bh1_screen_x, bh1_screen_y, bh1_screen_radius);
+    PhysBody* bh1 = App->physics->CreateCircle(bh1_screen_x, bh1_screen_y, bh1_screen_radius, b2_staticBody);
+    if (bh1)
+    {
+        bh1->body->GetFixtureList()->SetSensor(true);
+        bh1->listener = this;
+        blackHoles.push_back(bh1);
+    }
+
+    float bh2_tmx_cx = 896.0f + (96.0f / 2.0f);
+    float bh2_tmx_cy = 544.0f + (96.0f / 2.0f);
+    float bh2_tmx_radius = 96.0f / 2.0f;
+
+    int bh2_screen_x = (int)roundf(bh2_tmx_cx * scaleX);
+    int bh2_screen_y = (int)roundf(bh2_tmx_cy * scaleY);
+    int bh2_screen_radius = (int)roundf(bh2_tmx_radius * scaleX);
+
+    LOG("BH2 TMX(%.0f, %.0f, r=%.0f) -> Screen(%d, %d, r=%d)", bh2_tmx_cx, bh2_tmx_cy, bh2_tmx_radius, bh2_screen_x, bh2_screen_y, bh2_screen_radius);
+    PhysBody* bh2 = App->physics->CreateCircle(bh2_screen_x, bh2_screen_y, bh2_screen_radius, b2_staticBody);
+    if (bh2)
+    {
+        bh2->body->GetFixtureList()->SetSensor(true);
+        bh2->listener = this;
+        blackHoles.push_back(bh2);
+    }
+
     InitGameData(&gameData);
 
     LOG("ModuleGame Start complete");
@@ -230,6 +270,7 @@ bool ModuleGame::CleanUp()
     bumpers.clear();
     targets.clear();
     specialTargets.clear();
+    blackHoles.clear();
     mapCollisionPoints.clear();
 
     return true;
@@ -391,6 +432,12 @@ CollisionType ModuleGame::IdentifyCollision(PhysBody* bodyA, PhysBody* bodyB)
     if (bodyA == ballLossSensor || bodyB == ballLossSensor)
         return COLLISION_BALL_LOSS_SENSOR;
 
+    for (size_t i = 0; i < blackHoles.size(); ++i)
+    {
+        if (bodyA == blackHoles[i] || bodyB == blackHoles[i])
+            return COLLISION_BLACK_HOLE;
+    }
+
     for (size_t i = 0; i < bumpers.size(); ++i)
     {
         if (bodyA == bumpers[i] || bodyB == bumpers[i])
@@ -467,6 +514,13 @@ void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
                 App->audio->PlayFx(specialHitSfx);
             }
             AddScore(TARGET_SPECIAL, "Special Target");
+            break;
+        }
+
+        case COLLISION_BLACK_HOLE:
+        {
+            LOG("Ball entered black hole sensor! (No penalty)");
+            // ballLossTimer = 0.1f; --> Descomentar para que mate
             break;
         }
 
@@ -561,6 +615,8 @@ void ModuleGame::RenderMenuState()
 
 void ModuleGame::UpdatePlayingState()
 {
+    ApplyBlackHoleForces(GetFrameTime());
+
     if (IsKeyPressed(KEY_P))
     {
         TransitionToState(&gameData, STATE_PAUSED);
@@ -647,7 +703,6 @@ void ModuleGame::RenderPlayingState()
         DrawRectangle(SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT - 60, (int)(200 * chargePercent), 20, GREEN);
     }
 
-    // El showDebug de ModuleGame (F1) solo controla este sensor
     if (showDebug && ballLossSensor)
     {
         int x, y;
@@ -684,6 +739,19 @@ void ModuleGame::RenderPlayingState()
             DrawCircle(x, y, 30, ORANGE);
         }
     }
+
+    for (size_t i = 0; i < blackHoles.size(); ++i)
+    {
+        int x = 0, y = 0;
+        if (!blackHoles[i]) continue;
+        blackHoles[i]->GetPosition(x, y);
+
+        int radius = blackHoles[i]->width / 2;
+
+        DrawCircle(x, y, (float)radius, BLACK);
+        DrawCircle(x, y, (float)radius * 0.8f, { 20, 0, 40, 255 });
+    }
+
 
     for (size_t i = 0; i < targets.size(); ++i)
     {
@@ -1292,5 +1360,46 @@ void ModuleGame::LoadAudioSettings()
         App->audio->SetMasterVolume(master);
         App->audio->SetMusicVolume(music);
         App->audio->SetSFXVolume(sfx);
+    }
+}
+
+void ModuleGame::ApplyBlackHoleForces(float dt)
+{
+    if (!ball || !ball->body || gameData.currentState != STATE_PLAYING)
+    {
+        return;
+    }
+
+    b2Vec2 ballPos = ball->body->GetPosition();
+    float ballMass = ball->body->GetMass();
+
+    for (PhysBody* bh : blackHoles)
+    {
+        b2Vec2 bhPos = bh->body->GetPosition();
+        b2Vec2 diff = bhPos - ballPos;
+        float distSq = diff.LengthSquared();
+
+        const float MAX_ATTRACTION_DIST_SQ = 10.0f * 10.0f;
+        const float MIN_ATTRACTION_DIST = 0.5f;
+        const float GRAVITY_CONSTANT = 10.0f;
+
+        if (distSq < MAX_ATTRACTION_DIST_SQ && distSq > 0.001f)
+        {
+            float dist = sqrtf(distSq);
+
+            float effectiveDist = dist;
+            if (dist < MIN_ATTRACTION_DIST)
+            {
+                effectiveDist = MIN_ATTRACTION_DIST;
+            }
+
+            float forceMag = (GRAVITY_CONSTANT * ballMass) / (effectiveDist * effectiveDist);
+
+            b2Vec2 forceVec = diff;
+            forceVec.Normalize();
+            forceVec *= forceMag;
+
+            ball->body->ApplyForceToCenter(forceVec, true);
+        }
     }
 }

@@ -20,7 +20,8 @@ enum CollisionType
     COLLISION_TARGET,
     COLLISION_COMBO_LETTER,
     COLLISION_SPECIAL_TARGET,
-    COLLISION_BALL_LOSS_SENSOR
+    COLLISION_BALL_LOSS_SENSOR,
+    COLLISION_BLACK_HOLE
 };
 
 class ModuleGame : public Module
@@ -70,6 +71,8 @@ public:
     void PauseGame();
     void ResumeGame();
 
+    void ApplyBlackHoleForces(float dt);
+
 public:
     GameData gameData = {};
 
@@ -85,6 +88,7 @@ public:
     std::vector<PhysBody*> bumpers;
     std::vector<PhysBody*> targets;
     std::vector<PhysBody*> specialTargets;
+    std::vector<PhysBody*> blackHoles;
 
     Texture2D ballTexture = { 0 };
     Texture2D backgroundTexture = { 0 };

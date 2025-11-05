@@ -74,7 +74,8 @@ bool ModuleGame::Start()
     font = GetFontDefault();
     titleFont = GetFontDefault();
 
-    backgroundTexture = LoadTexture("assets/background/BG.png");
+    // <-- CAMBIO 1: Cargar la imagen de fondo correcta -->
+    backgroundTexture = LoadTexture("assets/map/Pinball_Map.jpg");
     if (backgroundTexture.id == 0) LOG("Warning: Failed to load background texture");
 
     ballTexture = LoadTexture("assets/balls/Planet1.png");
@@ -1119,6 +1120,9 @@ void ModuleGame::UpdateAudioSettings()
     if (IsKeyPressed(KEY_ESCAPE)) showAudioSettings = false;
 }
 
+// --------------------------------------------------------------------
+// <-- INICIO DE LA FUNCIÓN LoadTMXMap (CAMBIO 2) -->
+// --------------------------------------------------------------------
 bool ModuleGame::LoadTMXMap(const char* filepath)
 {
     LOG("Loading TMX map: %s", filepath);
@@ -1135,28 +1139,85 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
     fseek(file, 0, SEEK_SET);
 
     char* fileContent = (char*)malloc(fileSize + 1);
+    if (!fileContent) {
+        LOG("Failed to allocate memory for TMX file");
+        fclose(file);
+        return false;
+    }
     fread(fileContent, 1, fileSize, file);
     fileContent[fileSize] = '\0';
     fclose(file);
+
+    // --- INICIO DE LA LÓGICA DE PARSEO MEJORADA ---
 
     const char* polylineMarker = "<polyline points=\"";
     char* polylineStart = strstr(fileContent, polylineMarker);
     if (!polylineStart)
     {
+        LOG("TMX parse error: <polyline points=\" not found");
         free(fileContent);
         return false;
     }
 
-    polylineStart += strlen(polylineMarker);
+    // Buscar hacia atrás el tag <object> que contiene esta polyline
+    char* objectTagStart = polylineStart;
+    while (objectTagStart > fileContent && strncmp(objectTagStart, "<object", 7) != 0)
+    {
+        objectTagStart--;
+    }
+
+    if (objectTagStart == fileContent)
+    {
+        LOG("TMX parse error: Could not find parent <object> for <polyline>");
+        free(fileContent);
+        return false;
+    }
+
+    // Encontrar los atributos x="" e y="" DENTRO del tag <object>
+    char* xPosStr = strstr(objectTagStart, "x=\"");
+    char* yPosStr = strstr(objectTagStart, "y=\"");
+
+    float offsetX = 0.0f;
+    float offsetY = 0.0f;
+
+    // Asegurarse de que x="" e y="" estén antes de la polyline (es decir, pertenecen al mismo tag)
+    if (xPosStr && xPosStr < polylineStart)
+    {
+        offsetX = (float)atof(xPosStr + 3); // +3 para saltar 'x="'
+    }
+    else
+    {
+        LOG("TMX parse warning: Could not find 'x' attribute for object");
+    }
+
+    if (yPosStr && yPosStr < polylineStart)
+    {
+        offsetY = (float)atof(yPosStr + 3); // +3 para saltar 'y="'
+    }
+    else
+    {
+        LOG("TMX parse warning: Could not find 'y' attribute for object");
+    }
+
+    LOG("TMX object offset loaded: x=%.2f, y=%.2f", offsetX, offsetY);
+
+    // Ahora, parsear los puntos de la polyline
+    polylineStart += strlen(polylineMarker); // Mover el puntero al inicio de los datos
     char* polylineEnd = strchr(polylineStart, '"');
     if (!polylineEnd)
     {
+        LOG("TMX parse error: Malformed <polyline> tag");
         free(fileContent);
         return false;
     }
 
     size_t pointsLen = polylineEnd - polylineStart;
     char* pointsStr = (char*)malloc(pointsLen + 1);
+    if (!pointsStr) {
+        LOG("Failed to allocate memory for points string");
+        free(fileContent);
+        return false;
+    }
     strncpy(pointsStr, polylineStart, pointsLen);
     pointsStr[pointsLen] = '\0';
 
@@ -1164,18 +1225,33 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
     char* token = strtok(pointsStr, " ,");
     while (token != NULL)
     {
-        float value = (float)atof(token);
-        mapCollisionPoints.push_back((int)value);
+        // Leer el punto X
+        float px = (float)atof(token);
+        token = strtok(NULL, " ,");
+        if (token == NULL) break; // Fin inesperado
+
+        // Leer el punto Y
+        float py = (float)atof(token);
+
+        // Añadir las coordenadas ABSOLUTAS (Offset + Relativa)
+        mapCollisionPoints.push_back((int)(offsetX + px));
+        mapCollisionPoints.push_back((int)(offsetY + py));
+
         token = strtok(NULL, " ,");
     }
 
     free(pointsStr);
     free(fileContent);
 
-    LOG("Loaded %d collision points from TMX", (int)mapCollisionPoints.size());
+    // --- FIN DE LA LÓGICA DE PARSEO MEJORADA ---
+
+    LOG("Loaded %d collision points from TMX (absolute coords)", (int)mapCollisionPoints.size());
     return true;
 }
 
+// --------------------------------------------------------------------
+// <-- INICIO DE LA FUNCIÓN CreateMapCollision (CAMBIO 3) -->
+// --------------------------------------------------------------------
 void ModuleGame::CreateMapCollision()
 {
     if (mapCollisionPoints.empty())
@@ -1184,35 +1260,32 @@ void ModuleGame::CreateMapCollision()
         return;
     }
 
+    // Dimensiones nativas del mapa TMX (obtenidas de Pinball_Table.tmx: 23*32=736, 32*32=1024)
     const int TMX_MAP_W = 736;
     const int TMX_MAP_H = 1024;
 
-    float scale = (float)SCREEN_WIDTH / (float)TMX_MAP_W;
+    // Calcular factores de escala independientes para ESTIRAR el mapa
+    // a las dimensiones de la pantalla (definidas en Globals.h: 720x1000).
+    float scaleX = (float)SCREEN_WIDTH / (float)TMX_MAP_W;  // (720 / 736)
+    float scaleY = (float)SCREEN_HEIGHT / (float)TMX_MAP_H; // (1000 / 1024)
 
     std::vector<int> scaledPoints;
     scaledPoints.reserve(mapCollisionPoints.size());
 
-    int minX = INT_MAX, maxX = INT_MIN, minY = INT_MAX, maxY = INT_MIN;
+    // mapCollisionPoints AHORA CONTIENE COORDENADAS ABSOLUTAS
     for (size_t i = 0; i < mapCollisionPoints.size(); i += 2)
     {
-        int scaledX = (int)roundf(mapCollisionPoints[i] * scale);
-        int scaledY = (int)roundf(mapCollisionPoints[i + 1] * scale);
+        // Aplicar el estiramiento a las coordenadas absolutas
+        int scaledX = (int)roundf(mapCollisionPoints[i] * scaleX);
+        int scaledY = (int)roundf(mapCollisionPoints[i + 1] * scaleY);
         scaledPoints.push_back(scaledX);
         scaledPoints.push_back(scaledY);
-
-        if (scaledX < minX) minX = scaledX;
-        if (scaledX > maxX) maxX = scaledX;
-        if (scaledY < minY) minY = scaledY;
-        if (scaledY > maxY) maxY = scaledY;
     }
 
-    int polylineCenterX = (minX + maxX) / 2;
-    int polylineCenterY = (minY + maxY) / 2;
-
-    int objectX = (SCREEN_WIDTH / 2) - polylineCenterX;
-    int objectY = (SCREEN_HEIGHT / 2) - polylineCenterY;
-
-    mapBoundary = App->physics->CreateChain(objectX, objectY,
+    // Se elimina la lógica de centrado.
+    // Creamos la cadena de colisión en la posición (0, 0) para que
+    // el mapa estirado coincida exactamente con la imagen de fondo.
+    mapBoundary = App->physics->CreateChain(0, 0,
         scaledPoints.data(),
         (int)scaledPoints.size(),
         b2_staticBody);
@@ -1222,6 +1295,10 @@ void ModuleGame::CreateMapCollision()
         LOG("Failed to create map collision");
     }
 }
+// --------------------------------------------------------------------
+// <-- FIN DE LAS FUNCIONES MODIFICADAS -->
+// --------------------------------------------------------------------
+
 
 void ModuleGame::SaveAudioSettings()
 {

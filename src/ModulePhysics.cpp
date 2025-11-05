@@ -399,46 +399,41 @@ PhysBody* ModulePhysics::CreateRectangleSensor(int x, int y, int width, int heig
 PhysBody* ModulePhysics::CreateChain(int x, int y, const int* points, int size, b2BodyType type)
 {
 	PhysBody* pbody = new PhysBody();
-	
+
 	b2BodyDef body;
 	body.type = type;
-	// Convert screen coords to Box2D coords
 	body.position.Set(x * PIXELS_TO_METERS, (SCREEN_HEIGHT - y) * PIXELS_TO_METERS);
-	
+
 	b2Body* b = world->CreateBody(&body);
-	
-	// Convert all points to Box2D coordinates
+
 	b2Vec2* p = new b2Vec2[size / 2];
-	
-	for(uint i = 0; i < size / 2; ++i)
+
+	for (uint i = 0; i < size / 2; ++i)
 	{
 		p[i].x = points[i * 2 + 0] * PIXELS_TO_METERS;
-		// Flip Y coordinates for chain points
 		p[i].y = -points[i * 2 + 1] * PIXELS_TO_METERS;
 	}
-	
-	// Create individual edge shapes (two-sided) instead of chain shape (one-sided)
-	// This allows collision from both sides and prevents tunneling better
+
 	b2FixtureDef fixture;
 	fixture.friction = 0.3f;
 	fixture.restitution = 0.4f;
-	
-	for(uint i = 0; i < size / 2 - 1; ++i)
+
+	for (uint i = 0; i < size / 2 - 1; ++i)
 	{
 		b2EdgeShape edge;
 		edge.SetTwoSided(p[i], p[i + 1]);
-		edge.m_radius = 0.01f; // Thick edges: 0.4m = ~20 pixels
-		
+		edge.m_radius = 0.13f;
+
 		fixture.shape = &edge;
 		b->CreateFixture(&fixture);
 	}
-	
+
 	delete[] p;
-	
+
 	pbody->body = b;
 	b->GetUserData().pointer = (uintptr_t)pbody;
 	pbody->width = pbody->height = 0;
-	
+
 	return pbody;
 }
 

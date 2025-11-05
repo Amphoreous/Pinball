@@ -116,7 +116,7 @@ bool ModuleGame::Start()
         LOG("Warning: Could not load TMX map");
     }
 
-    ball = App->physics->CreateCircle(2.48f * METERS_TO_PIXELS, SCREEN_HEIGHT - (7.44f * METERS_TO_PIXELS), 15, b2_dynamicBody);
+    ball = App->physics->CreateCircle(2.0f * METERS_TO_PIXELS, 8.7f * METERS_TO_PIXELS, 15, b2_dynamicBody);
 
     if (ball)
     {
@@ -501,7 +501,7 @@ void ModuleGame::UpdateMenuState()
         if (ball && ball->body)
         {
             ball->body->SetEnabled(true);
-            ball->body->SetTransform(b2Vec2(2.48f, 7.44f), 0);
+            ball->body->SetTransform(b2Vec2(2.0f, 8.7f), 0);
             ball->body->SetLinearVelocity(b2Vec2(0, 0));
             ball->body->SetAngularVelocity(0);
         }
@@ -854,7 +854,7 @@ void ModuleGame::UpdateGameOverState()
         if (ball && ball->body)
         {
             ball->body->SetEnabled(true);
-            ball->body->SetTransform(b2Vec2(2.48f, 7.44f), 0);
+            ball->body->SetTransform(b2Vec2(2.0f, 8.7f), 0);
             ball->body->SetLinearVelocity(b2Vec2(0, 0));
             ball->body->SetAngularVelocity(0);
         }
@@ -920,7 +920,7 @@ void ModuleGame::RespawnBall()
         return;
     }
 
-    ball->body->SetTransform(b2Vec2(2.48f, 7.44f), 0);
+    ball->body->SetTransform(b2Vec2(2.0f, 8.7f), 0);
     ball->body->SetLinearVelocity(b2Vec2(0, 0));
     ball->body->SetAngularVelocity(0);
     ball->body->SetEnabled(true);

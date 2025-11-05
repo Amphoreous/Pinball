@@ -120,11 +120,13 @@ public:
     bool ballLaunched = false;
     float kickerForce = 0.0f;
     float kickerChargeTime = 0.0f;
-    const float MAX_KICKER_FORCE = 20.0f;
-    const float KICKER_CHARGE_SPEED = 10.0f;
+    // Increase launcher power and charge rate
+    const float MAX_KICKER_FORCE = 45.0f;      // was 20.0f
+    const float KICKER_CHARGE_SPEED = 30.0f;   // was 10.0f
 
     // Sound effects (loaded once, played multiple times)
     int bumperHitSfx = -1;
+    int launchSfx = -1;
     int targetHitSfx = -1;
     int specialHitSfx = -1;
 

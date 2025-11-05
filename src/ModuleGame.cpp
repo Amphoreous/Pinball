@@ -95,7 +95,9 @@ bool ModuleGame::Start()
     if (titleTexture.id == 0) LOG("Warning: Failed to load title texture");
 
     bumperHitSfx = App->audio->LoadFx("assets/audio/bumper_hit.wav");
-    targetHitSfx = App->audio->LoadFx("assets/audio/flipper_hit.wav");
+    // Preload a dedicated launch sound to avoid reloading on each launch
+    launchSfx    = App->audio->LoadFx("assets/audio/flipper_hit.wav");
+    targetHitSfx = App->audio->LoadFx("assets/audio/target_hit.wav");
     specialHitSfx = App->audio->LoadFx("assets/audio/bonus_sound.wav");
 
     LoadAudioSettings();
@@ -840,8 +842,7 @@ void ModuleGame::LaunchBall()
     kickerChargeTime = 0.0f;
     kickerForce = 0.0f;
 
-    int fx = App->audio->LoadFx("assets/audio/flipper_hit.wav");
-    if (fx >= 0) App->audio->PlayFx(fx);
+    if (launchSfx >= 0) App->audio->PlayFx(launchSfx);
 }
 
 void ModuleGame::LoseBall()

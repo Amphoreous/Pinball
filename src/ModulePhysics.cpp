@@ -37,7 +37,7 @@ bool ModulePhysics::Start()
 update_status ModulePhysics::PreUpdate()
 {
 	// Limit velocity of dynamic bodies to prevent tunneling
-	const float MAX_VELOCITY = 30.0f; // 30 m/s (~1500 pixels/s)
+	const float MAX_VELOCITY = 45.0f; // allow stronger launcher before clamp
 	for(b2Body* b = world->GetBodyList(); b; b = b->GetNext())
 	{
 		if(b->GetType() == b2_dynamicBody)

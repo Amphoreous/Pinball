@@ -179,45 +179,32 @@ bool ModuleGame::Start()
 
     CreateBallLossSensor();
 
-    LOG("Creating black holes...");
+    LOG("Creating black holes from TMX data...");
 
     const int TMX_MAP_W = 1280;
     const int TMX_MAP_H = 1600;
     float scaleX = (float)SCREEN_WIDTH / (float)TMX_MAP_W;
     float scaleY = (float)SCREEN_HEIGHT / (float)TMX_MAP_H;
 
-    float bh1_tmx_cx = 288.0f + (96.0f / 2.0f);
-    float bh1_tmx_cy = 864.0f + (96.0f / 2.0f);
-    float bh1_tmx_radius = 96.0f / 2.0f;
-
-    int bh1_screen_x = (int)roundf(bh1_tmx_cx * scaleX);
-    int bh1_screen_y = (int)roundf(bh1_tmx_cy * scaleY);
-    int bh1_screen_radius = (int)roundf(bh1_tmx_radius * scaleX);
-
-    LOG("BH1 TMX(%.0f, %.0f, r=%.0f) -> Screen(%d, %d, r=%d)", bh1_tmx_cx, bh1_tmx_cy, bh1_tmx_radius, bh1_screen_x, bh1_screen_y, bh1_screen_radius);
-    PhysBody* bh1 = App->physics->CreateCircle(bh1_screen_x, bh1_screen_y, bh1_screen_radius, b2_staticBody);
-    if (bh1)
+    for (const auto& bhRect : tmxBlackHoles)
     {
-        bh1->body->GetFixtureList()->SetSensor(true);
-        bh1->listener = this;
-        blackHoles.push_back(bh1);
-    }
+        float tmx_cx = bhRect.x + (bhRect.width / 2.0f);
+        float tmx_cy = bhRect.y + (bhRect.height / 2.0f);
+        float tmx_radius = bhRect.width / 2.0f;
 
-    float bh2_tmx_cx = 896.0f + (96.0f / 2.0f);
-    float bh2_tmx_cy = 544.0f + (96.0f / 2.0f);
-    float bh2_tmx_radius = 96.0f / 2.0f;
+        int screen_x = (int)roundf(tmx_cx * scaleX);
+        int screen_y = (int)roundf(tmx_cy * scaleY);
+        int screen_radius = (int)roundf(tmx_radius * scaleX);
 
-    int bh2_screen_x = (int)roundf(bh2_tmx_cx * scaleX);
-    int bh2_screen_y = (int)roundf(bh2_tmx_cy * scaleY);
-    int bh2_screen_radius = (int)roundf(bh2_tmx_radius * scaleX);
+        LOG("Creating Black Hole TMX(%.0f, %.0f, r=%.0f) -> Screen(%d, %d, r=%d)", tmx_cx, tmx_cy, tmx_radius, screen_x, screen_y, screen_radius);
 
-    LOG("BH2 TMX(%.0f, %.0f, r=%.0f) -> Screen(%d, %d, r=%d)", bh2_tmx_cx, bh2_tmx_cy, bh2_tmx_radius, bh2_screen_x, bh2_screen_y, bh2_screen_radius);
-    PhysBody* bh2 = App->physics->CreateCircle(bh2_screen_x, bh2_screen_y, bh2_screen_radius, b2_staticBody);
-    if (bh2)
-    {
-        bh2->body->GetFixtureList()->SetSensor(true);
-        bh2->listener = this;
-        blackHoles.push_back(bh2);
+        PhysBody* bh = App->physics->CreateCircle(screen_x, screen_y, screen_radius, b2_staticBody);
+        if (bh)
+        {
+            bh->body->GetFixtureList()->SetSensor(true);
+            bh->listener = this;
+            blackHoles.push_back(bh);
+        }
     }
 
     InitGameData(&gameData);
@@ -1116,9 +1103,6 @@ void ModuleGame::UpdateAudioSettings()
     if (IsKeyPressed(KEY_ESCAPE)) showAudioSettings = false;
 }
 
-// --------------------------------------------------------------------
-// <-- INICIO DE LA FUNCIÓN LoadTMXMap (CAMBIO 2) -->
-// --------------------------------------------------------------------
 bool ModuleGame::LoadTMXMap(const char* filepath)
 {
     LOG("Loading TMX map: %s", filepath);
@@ -1144,110 +1128,107 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
     fileContent[fileSize] = '\0';
     fclose(file);
 
-    // --- INICIO DE LA LÓGICA DE PARSEO MEJORADA ---
-
-    const char* polylineMarker = "<polyline points=\"";
-    char* polylineStart = strstr(fileContent, polylineMarker);
-    if (!polylineStart)
-    {
-        LOG("TMX parse error: <polyline points=\" not found");
-        free(fileContent);
-        return false;
-    }
-
-    // Buscar hacia atrás el tag <object> que contiene esta polyline
-    char* objectTagStart = polylineStart;
-    while (objectTagStart > fileContent && strncmp(objectTagStart, "<object", 7) != 0)
-    {
-        objectTagStart--;
-    }
-
-    if (objectTagStart == fileContent)
-    {
-        LOG("TMX parse error: Could not find parent <object> for <polyline>");
-        free(fileContent);
-        return false;
-    }
-
-    // Encontrar los atributos x="" e y="" DENTRO del tag <object>
-    char* xPosStr = strstr(objectTagStart, "x=\"");
-    char* yPosStr = strstr(objectTagStart, "y=\"");
-
-    float offsetX = 0.0f;
-    float offsetY = 0.0f;
-
-    // Asegurarse de que x="" e y="" estén antes de la polyline (es decir, pertenecen al mismo tag)
-    if (xPosStr && xPosStr < polylineStart)
-    {
-        offsetX = (float)atof(xPosStr + 3); // +3 para saltar 'x="'
-    }
-    else
-    {
-        LOG("TMX parse warning: Could not find 'x' attribute for object");
-    }
-
-    if (yPosStr && yPosStr < polylineStart)
-    {
-        offsetY = (float)atof(yPosStr + 3); // +3 para saltar 'y="'
-    }
-    else
-    {
-        LOG("TMX parse warning: Could not find 'y' attribute for object");
-    }
-
-    LOG("TMX object offset loaded: x=%.2f, y=%.2f", offsetX, offsetY);
-
-    // Ahora, parsear los puntos de la polyline
-    polylineStart += strlen(polylineMarker); // Mover el puntero al inicio de los datos
-    char* polylineEnd = strchr(polylineStart, '"');
-    if (!polylineEnd)
-    {
-        LOG("TMX parse error: Malformed <polyline> tag");
-        free(fileContent);
-        return false;
-    }
-
-    size_t pointsLen = polylineEnd - polylineStart;
-    char* pointsStr = (char*)malloc(pointsLen + 1);
-    if (!pointsStr) {
-        LOG("Failed to allocate memory for points string");
-        free(fileContent);
-        return false;
-    }
-    strncpy(pointsStr, polylineStart, pointsLen);
-    pointsStr[pointsLen] = '\0';
-
     mapCollisionPoints.clear();
-    char* token = strtok(pointsStr, " ,");
-    while (token != NULL)
+    tmxBlackHoles.clear();
+
+    char* filePtr = fileContent;
+    int objectsFound = 0;
+
+    const char* objectTag = "<object "; // <-- LA CORRECCIÓN: Un espacio aquí
+
+    const char* objectEndTag = "</object>";
+    size_t objectEndTagLen = strlen(objectEndTag);
+
+    while ((filePtr = strstr(filePtr, objectTag)) != nullptr)
     {
-        // Leer el punto X
-        float px = (float)atof(token);
-        token = strtok(NULL, " ,");
-        if (token == NULL) break; // Fin inesperado
+        char* objectEnd = strstr(filePtr, objectEndTag);
 
-        // Leer el punto Y
-        float py = (float)atof(token);
+        if (!objectEnd)
+        {
+            LOG("TMX parse warning: Found <object > without matching </object>. Skipping.");
+            filePtr += strlen(objectTag);
+            continue;
+        }
 
-        // Añadir las coordenadas ABSOLUTAS (Offset + Relativa)
-        mapCollisionPoints.push_back((int)(offsetX + px));
-        mapCollisionPoints.push_back((int)(offsetY + py));
+        char* nameTag = strstr(filePtr, "name=\"");
+        if (nameTag && nameTag < objectEnd)
+        {
+            bool isBH = (strncmp(nameTag + 6, "BH1", 3) == 0 || strncmp(nameTag + 6, "BH2", 3) == 0);
 
-        token = strtok(NULL, " ,");
+            if (isBH)
+            {
+                char* xStr = strstr(filePtr, "x=\"");
+                char* yStr = strstr(filePtr, "y=\"");
+                char* wStr = strstr(filePtr, "width=\"");
+                char* hStr = strstr(filePtr, "height=\"");
+
+                if (xStr && yStr && wStr && hStr &&
+                    xStr < objectEnd && yStr < objectEnd && wStr < objectEnd && hStr < objectEnd)
+                {
+                    float x = (float)atof(xStr + 3);
+                    float y = (float)atof(yStr + 3);
+                    float w = (float)atof(wStr + 7);
+                    float h = (float)atof(hStr + 8);
+                    tmxBlackHoles.push_back(Rectangle{ x, y, w, h });
+                    LOG("TMX parse: Found Black Hole at (%.0f, %.0f)", x, y);
+                    objectsFound++;
+                }
+            }
+        }
+
+        const char* polylineMarker = "<polyline points=\"";
+        char* polylineStart = strstr(filePtr, polylineMarker);
+
+        if (polylineStart && polylineStart < objectEnd)
+        {
+            char* xPosStr = strstr(filePtr, "x=\"");
+            char* yPosStr = strstr(filePtr, "y=\"");
+
+            float offsetX = 0.0f;
+            float offsetY = 0.0f;
+
+            if (xPosStr && xPosStr < polylineStart) offsetX = (float)atof(xPosStr + 3);
+            if (yPosStr && yPosStr < polylineStart) offsetY = (float)atof(yPosStr + 3);
+
+            polylineStart += strlen(polylineMarker);
+            char* polylineEnd = strchr(polylineStart, '"');
+            if (polylineEnd)
+            {
+                size_t pointsLen = polylineEnd - polylineStart;
+                char* pointsStr = (char*)malloc(pointsLen + 1);
+
+                if (pointsStr)
+                {
+                    strncpy(pointsStr, polylineStart, pointsLen);
+                    pointsStr[pointsLen] = '\0';
+
+                    char* token = strtok(pointsStr, " ,");
+                    while (token != NULL)
+                    {
+                        float px = (float)atof(token);
+                        token = strtok(NULL, " ,");
+                        if (token == NULL) break;
+                        float py = (float)atof(token);
+
+                        mapCollisionPoints.push_back((int)(offsetX + px));
+                        mapCollisionPoints.push_back((int)(offsetY + py));
+                        token = strtok(NULL, " ,");
+                    }
+                    free(pointsStr);
+                    LOG("Loaded %d collision points from TMX", (int)mapCollisionPoints.size());
+                    objectsFound++;
+                }
+            }
+        }
+
+        filePtr = objectEnd + objectEndTagLen;
     }
 
-    free(pointsStr);
     free(fileContent);
-
-    // --- FIN DE LA LÓGICA DE PARSEO MEJORADA ---
-
-    LOG("Loaded %d collision points from TMX (absolute coords)", (int)mapCollisionPoints.size());
+    LOG("TMX parsing complete. Found %d objects.", objectsFound);
     return true;
 }
 
-// --------------------------------------------------------------------
-// <-- INICIO DE LA FUNCIÓN CreateMapCollision (CAMBIO 3) -->
-// --------------------------------------------------------------------
 void ModuleGame::CreateMapCollision()
 {
     if (mapCollisionPoints.empty())

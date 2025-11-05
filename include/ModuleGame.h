@@ -125,6 +125,7 @@ public:
     int ballLostSfx = -1;
 
     std::vector<int> mapCollisionPoints;
+    std::vector<Rectangle> tmxBlackHoles;
     PhysBody* mapBoundary = nullptr;
 
     float scoreFlashTimer = 0.0f;

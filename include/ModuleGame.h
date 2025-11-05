@@ -101,6 +101,7 @@ public:
     Texture2D piece2Texture = { 0 };
     Texture2D targetTexture = { 0 };
     Texture2D specialTargetTexture = { 0 };
+    Texture2D blackHoleTexture = { 0 };
 
     Texture2D titleTexture = { 0 };
 

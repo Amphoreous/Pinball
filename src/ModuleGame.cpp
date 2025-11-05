@@ -85,6 +85,9 @@ bool ModuleGame::Start()
     bumper3Texture = LoadTexture("assets/bumpers/bumper3.png");
     if (bumper3Texture.id == 0) LOG("Warning: Failed to load bumper3 texture");
 
+    blackHoleTexture = LoadTexture("assets/bumpers/bh.png");
+    if (blackHoleTexture.id == 0) LOG("Warning: Failed to load blackHole texture");
+
     piece1Texture = LoadTexture("assets/extra/piece1.png");
     if (piece1Texture.id == 0) LOG("Warning: Failed to load piece1 texture");
 
@@ -241,6 +244,7 @@ bool ModuleGame::CleanUp()
     if (bumper1Texture.id) UnloadTexture(bumper1Texture);
     if (bumper2Texture.id) UnloadTexture(bumper2Texture);
     if (bumper3Texture.id) UnloadTexture(bumper3Texture);
+    if (blackHoleTexture.id) UnloadTexture(blackHoleTexture);
     if (piece1Texture.id) UnloadTexture(piece1Texture);
     if (piece2Texture.id) UnloadTexture(piece2Texture);
     if (targetTexture.id) UnloadTexture(targetTexture);
@@ -253,6 +257,8 @@ bool ModuleGame::CleanUp()
     specialTargets.clear();
     blackHoles.clear();
     mapCollisionPoints.clear();
+    tmxBlackHoles.clear();
+    tmxBumpers.clear();
 
     return true;
 }
@@ -727,10 +733,22 @@ void ModuleGame::RenderPlayingState()
         if (!blackHoles[i]) continue;
         blackHoles[i]->GetPosition(x, y);
 
-        int radius = blackHoles[i]->width / 2;
-
-        DrawCircle(x, y, (float)radius, BLACK);
-        DrawCircle(x, y, (float)radius * 0.8f, { 20, 0, 40, 255 });
+        if (blackHoleTexture.id)
+        {
+            float scale = (float)blackHoles[i]->width / (float)blackHoleTexture.width;
+            int width = (int)(blackHoleTexture.width * scale);
+            int height = (int)(blackHoleTexture.height * scale);
+            Rectangle src = { 0,0,(float)blackHoleTexture.width,(float)blackHoleTexture.height };
+            Rectangle dst = { (float)x, (float)y, (float)width, (float)height };
+            Vector2 origin = { width / 2.0f, height / 2.0f };
+            DrawTexturePro(blackHoleTexture, src, dst, origin, 0.0f, WHITE);
+        }
+        else
+        {
+            int radius = blackHoles[i]->width / 2;
+            DrawCircle(x, y, (float)radius, BLACK);
+            DrawCircle(x, y, (float)radius * 0.8f, { 20, 0, 40, 255 });
+        }
     }
 
 

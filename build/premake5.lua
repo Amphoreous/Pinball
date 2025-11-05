@@ -182,11 +182,18 @@ end
         vpaths 
         {
             ["Header Files/*"] = { "../include/**.h",  "../include/**.hpp", "../src/**.h", "../src/**.hpp"},
-            ["Source Files/*"] = {"../src/**.c", "src/**.cpp"},
-            ["Windows Resource Files/*"] = {"../src/**.rc", "src/**.ico"},
+            ["Source Files/*"] = {"../src/**.c", "../src/**.cpp"},
+            ["Windows Resource Files/*"] = {"../src/**.rc", "../src/**.ico"},
         }
         
-        files {"../src/**.c", "../src/**.cpp", "../src/**.h", "../src/**.hpp", "../include/**.h", "../include/**.hpp"}
+        files {
+    "../src/**.c", 
+    "../src/**.cpp", 
+    "../src/**.h", 
+    "../src/**.hpp", 
+    "../include/**.h", 
+    "../include/**.hpp"
+}
         
         filter {"system:windows", "action:vs*"}
             files {"../src/*.rc", "../src/*.ico"}

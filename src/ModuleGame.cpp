@@ -50,6 +50,15 @@ ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start
     lastScoreIncrease = 0;
 
     ballLossTimer = 0.0f;
+
+    ballSavedPosX = 0.0f;
+    ballSavedPosY = 0.0f;
+    ballSavedVelX = 0.0f;
+    ballSavedVelY = 0.0f;
+    ballSavedAngularVel = 0.0f;
+    ballSavedAwake = false;
+
+    isGamePaused = false;
 }
 
 ModuleGame::~ModuleGame()
@@ -323,14 +332,17 @@ update_status ModuleGame::Update()
         RenderGameOverState();
         break;
 
+    case STATE_YOU_WIN:
+        UpdateYouWinState();
+        RenderYouWinState();
+        break;
+
     default:
         UpdatePlayingState();
         RenderPlayingState();
         break;
     }
 
-    // El debug draw de la física (hitboxes) se activa en Application.cpp con F1
-    // Esta variable 'showDebug' solo controla cosas extra (como el sensor de pérdida)
     if (IsKeyPressed(KEY_F1))
         showDebug = !showDebug;
 
@@ -507,7 +519,6 @@ void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
         case COLLISION_BLACK_HOLE:
         {
             LOG("Ball entered black hole sensor! (No penalty)");
-            // ballLossTimer = 0.1f; --> Descomentar para que mate
             break;
         }
 
@@ -961,6 +972,59 @@ void ModuleGame::RenderGameOverState()
     DrawText("Press R to Restart", SCREEN_WIDTH / 2 - 150, 500, 25, GREEN);
 }
 
+void ModuleGame::UpdateYouWinState()
+{
+    if (IsKeyPressed(KEY_M))
+    {
+        TransitionToState(&gameData, STATE_MENU);
+        if (ball && ball->body) ball->body->SetEnabled(false);
+    }
+
+    if (IsKeyPressed(KEY_R))
+    {
+        ResetGame(&gameData);
+        TransitionToState(&gameData, STATE_PLAYING);
+
+        if (ball && ball->body)
+        {
+            ball->body->SetEnabled(true);
+            ball->body->SetTransform(b2Vec2(2.0f, 8.7f), 0);
+            ball->body->SetLinearVelocity(b2Vec2(0, 0));
+            ball->body->SetAngularVelocity(0);
+        }
+
+        ballLaunched = false;
+    }
+}
+
+void ModuleGame::RenderYouWinState()
+{
+    if (backgroundTexture.id)
+    {
+        Rectangle src = { 0, 0, (float)backgroundTexture.width, (float)backgroundTexture.height };
+        Rectangle dst = { 0, 0, (float)SCREEN_WIDTH, (float)SCREEN_HEIGHT };
+        Vector2 origin = { 0, 0 };
+        DrawTexturePro(backgroundTexture, src, dst, origin, 0.0f, WHITE);
+    }
+    else
+        ClearBackground(Color{ 10, 30, 10, 255 });
+
+    const char* youWinText = "YOU WIN!";
+    int textWidth = MeasureText(youWinText, 70);
+    DrawText(youWinText, SCREEN_WIDTH / 2 - textWidth / 2, 150, 70, GREEN);
+
+    DrawText(TextFormat("New High Score: %d", gameData.previousScore),
+        SCREEN_WIDTH / 2 - 180, 280, 35, GOLD);
+
+    DrawText("CONGRATULATIONS!", SCREEN_WIDTH / 2 - 150, 340, 30, YELLOW);
+
+    DrawText(TextFormat("Previous High Score: %d", gameData.highestScore),
+        SCREEN_WIDTH / 2 - 200, 380, 25, LIGHTGRAY);
+
+    DrawText("Press M to Main Menu", SCREEN_WIDTH / 2 - 150, 450, 25, SKYBLUE);
+    DrawText("Press R to Play Again", SCREEN_WIDTH / 2 - 150, 500, 25, GREEN);
+}
+
 void ModuleGame::LaunchBall()
 {
     if (!ball || !ball->body) return;
@@ -1025,9 +1089,12 @@ void ModuleGame::LoseBall()
         {
             gameData.highestScore = gameData.currentScore;
             gameData.scoreNeedsSaving = true;
+            TransitionToState(&gameData, STATE_YOU_WIN);
         }
-
-        TransitionToState(&gameData, STATE_GAME_OVER);
+        else
+        {
+            TransitionToState(&gameData, STATE_GAME_OVER);
+        }
 
         if (ball && ball->body)
         {
@@ -1263,31 +1330,23 @@ void ModuleGame::CreateMapCollision()
         return;
     }
 
-    // Dimensiones nativas de TU MAPA DE TILED
     const int TMX_MAP_W = 1280;
     const int TMX_MAP_H = 1600;
 
-    // Calcular factores de escala independientes para ESTIRAR el mapa
-    // a las dimensiones de la pantalla (definidas en Globals.h: 720x1000).
-    float scaleX = (float)SCREEN_WIDTH / (float)TMX_MAP_W;  // (720 / 1280)
-    float scaleY = (float)SCREEN_HEIGHT / (float)TMX_MAP_H; // (1000 / 1600)
+    float scaleX = (float)SCREEN_WIDTH / (float)TMX_MAP_W;
+    float scaleY = (float)SCREEN_HEIGHT / (float)TMX_MAP_H;
 
     std::vector<int> scaledPoints;
     scaledPoints.reserve(mapCollisionPoints.size());
 
-    // mapCollisionPoints AHORA CONTIENE COORDENADAS ABSOLUTAS (gracias a LoadTMXMap)
     for (size_t i = 0; i < mapCollisionPoints.size(); i += 2)
     {
-        // Aplicar el estiramiento a las coordenadas absolutas
         int scaledX = (int)roundf(mapCollisionPoints[i] * scaleX);
         int scaledY = (int)roundf(mapCollisionPoints[i + 1] * scaleY);
         scaledPoints.push_back(scaledX);
         scaledPoints.push_back(scaledY);
     }
 
-    // Se elimina la lógica de centrado.
-    // Creamos la cadena de colisión en la posición (0, 0) para que
-    // el mapa estirado coincida exactamente con la imagen de fondo.
     mapBoundary = App->physics->CreateChain(0, 0,
         scaledPoints.data(),
         (int)scaledPoints.size(),
@@ -1298,10 +1357,6 @@ void ModuleGame::CreateMapCollision()
         LOG("Failed to create map collision");
     }
 }
-// --------------------------------------------------------------------
-// <-- FIN DE LAS FUNCIONES MODIFICADAS -->
-// --------------------------------------------------------------------
-
 
 void ModuleGame::SaveAudioSettings()
 {
@@ -1409,4 +1464,26 @@ void ModuleGame::ApplyBlackHoleForces(float dt)
             ball->body->ApplyForceToCenter(forceVec, true);
         }
     }
+}
+
+void ModuleGame::PauseGame()
+{
+    if (gameData.currentState == STATE_PLAYING)
+    {
+        TransitionToState(&gameData, STATE_PAUSED);
+        isGamePaused = true;
+    }
+}
+
+void ModuleGame::ResumeGame()
+{
+    if (gameData.currentState == STATE_PAUSED)
+    {
+        TransitionToState(&gameData, STATE_PLAYING);
+        isGamePaused = false;
+    }
+}
+
+void ModuleGame::UpdateScoreDisplay()
+{
 }

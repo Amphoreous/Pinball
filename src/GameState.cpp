@@ -111,6 +111,12 @@ void TransitionToState(GameData* game, GameState newState)
         game->previousScore = game->currentScore;
         UpdateHighScore(game);
         break;
+
+    case STATE_YOU_WIN:
+        LOG("YOU WIN - New High Score: %d", game->currentScore);
+        game->previousScore = game->currentScore;
+        UpdateHighScore(game);
+        break;
     }
 }
 
@@ -137,7 +143,12 @@ void ResetRound(GameData* game)
 
     if (game->ballsLeft <= 0)
     {
-        TransitionToState(game, STATE_GAME_OVER);
+        if (game->currentScore > game->highestScore) {
+            TransitionToState(game, STATE_YOU_WIN);
+        }
+        else {
+            TransitionToState(game, STATE_GAME_OVER);
+        }
     }
     else
     {

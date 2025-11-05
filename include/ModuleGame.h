@@ -47,11 +47,13 @@ public:
     void RenderPlayingState();
     void RenderPausedState();
     void RenderGameOverState();
+    void RenderYouWinState(); // Nueva función
 
     void UpdateMenuState();
     void UpdatePlayingState();
     void UpdatePausedState();
     void UpdateGameOverState();
+    void UpdateYouWinState(); // Nueva función
 
     void LaunchBall();
     void LoseBall();
@@ -136,10 +138,10 @@ public:
 
     float ballLossTimer = 0.0f;
 
-    float ballSavedPosX, ballSavedPosY;
-    float ballSavedVelX, ballSavedVelY;
-    float ballSavedAngularVel;
-    bool ballSavedAwake;
+    float ballSavedPosX = 0.0f, ballSavedPosY = 0.0f;
+    float ballSavedVelX = 0.0f, ballSavedVelY = 0.0f;
+    float ballSavedAngularVel = 0.0f;
+    bool ballSavedAwake = false;
 
     bool isGamePaused = false;
 };

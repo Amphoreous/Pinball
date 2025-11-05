@@ -6,7 +6,8 @@ typedef enum {
     STATE_MENU,
     STATE_PLAYING,
     STATE_PAUSED,
-    STATE_GAME_OVER
+    STATE_GAME_OVER,
+    STATE_YOU_WIN
 } GameState;
 
 typedef enum {

@@ -126,6 +126,7 @@ public:
 
     std::vector<int> mapCollisionPoints;
     std::vector<Rectangle> tmxBlackHoles;
+    std::vector<Rectangle> tmxBumpers;
     PhysBody* mapBoundary = nullptr;
 
     float scoreFlashTimer = 0.0f;

@@ -124,34 +124,34 @@ bool ModuleGame::Start()
             ball->body->SetEnabled(false);
     }
 
-    int centerX = SCREEN_WIDTH / 2;
-    int bumperY = 300;
-    PhysBody* b1 = App->physics->CreateCircle(centerX - 80, bumperY + 30, 30, b2_staticBody);
-    if (b1)
+    const int TMX_MAP_W = 1280;
+    const int TMX_MAP_H = 1600;
+    float scaleX = (float)SCREEN_WIDTH / (float)TMX_MAP_W;
+    float scaleY = (float)SCREEN_HEIGHT / (float)TMX_MAP_H;
+
+    LOG("Creating bumpers from TMX data...");
+    for (const auto& bRect : tmxBumpers)
     {
-        if (b1->body && b1->body->GetFixtureList())
-            b1->body->GetFixtureList()->SetRestitution(1.5f);
-        b1->listener = this;
-        bumpers.push_back(b1);
-    }
-    PhysBody* b2 = App->physics->CreateCircle(centerX, bumperY, 30, b2_staticBody);
-    if (b2)
-    {
-        if (b2->body && b2->body->GetFixtureList())
-            b2->body->GetFixtureList()->SetRestitution(1.5f);
-        b2->listener = this;
-        bumpers.push_back(b2);
-    }
-    PhysBody* b3 = App->physics->CreateCircle(centerX + 80, bumperY + 30, 30, b2_staticBody);
-    if (b3)
-    {
-        if (b3->body && b3->body->GetFixtureList())
-            b3->body->GetFixtureList()->SetRestitution(1.5f);
-        b3->listener = this;
-        bumpers.push_back(b3);
+        float tmx_cx = bRect.x + (bRect.width / 2.0f);
+        float tmx_cy = bRect.y + (bRect.height / 2.0f);
+        float tmx_radius = bRect.width / 2.0f;
+
+        int screen_x = (int)roundf(tmx_cx * scaleX);
+        int screen_y = (int)roundf(tmx_cy * scaleY);
+        int screen_radius = (int)roundf(tmx_radius * scaleX);
+
+        PhysBody* b = App->physics->CreateCircle(screen_x, screen_y, screen_radius, b2_staticBody);
+        if (b)
+        {
+            if (b->body && b->body->GetFixtureList())
+                b->body->GetFixtureList()->SetRestitution(1.5f);
+            b->listener = this;
+            bumpers.push_back(b);
+        }
     }
 
     int targetY = 200;
+    int centerX = SCREEN_WIDTH / 2;
     PhysBody* t1 = App->physics->CreateRectangle(centerX - 120, targetY, 40, 20, b2_staticBody);
     if (t1) {
         t1->listener = this;
@@ -180,12 +180,6 @@ bool ModuleGame::Start()
     CreateBallLossSensor();
 
     LOG("Creating black holes from TMX data...");
-
-    const int TMX_MAP_W = 1280;
-    const int TMX_MAP_H = 1600;
-    float scaleX = (float)SCREEN_WIDTH / (float)TMX_MAP_W;
-    float scaleY = (float)SCREEN_HEIGHT / (float)TMX_MAP_H;
-
     for (const auto& bhRect : tmxBlackHoles)
     {
         float tmx_cx = bhRect.x + (bhRect.width / 2.0f);
@@ -707,13 +701,13 @@ void ModuleGame::RenderPlayingState()
         bumpers[i]->GetPosition(x, y);
 
         Texture2D* bumperTex = nullptr;
-        if (i == 0) bumperTex = &bumper1Texture;
-        else if (i == 1) bumperTex = &bumper2Texture;
+        if (i % 3 == 0) bumperTex = &bumper1Texture;
+        else if (i % 3 == 1) bumperTex = &bumper2Texture;
         else bumperTex = &bumper3Texture;
 
         if (bumperTex && bumperTex->id)
         {
-            float scale = 60.0f / (float)bumperTex->width;
+            float scale = (float)bumpers[i]->width / (float)bumperTex->width;
             int width = (int)(bumperTex->width * scale);
             int height = (int)(bumperTex->height * scale);
             Rectangle src = { 0,0,(float)bumperTex->width,(float)bumperTex->height };
@@ -723,7 +717,7 @@ void ModuleGame::RenderPlayingState()
         }
         else
         {
-            DrawCircle(x, y, 30, ORANGE);
+            DrawCircle(x, y, (float)bumpers[i]->width / 2.0f, ORANGE);
         }
     }
 
@@ -1130,12 +1124,12 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
 
     mapCollisionPoints.clear();
     tmxBlackHoles.clear();
+    tmxBumpers.clear();
 
     char* filePtr = fileContent;
     int objectsFound = 0;
 
-    const char* objectTag = "<object "; // <-- LA CORRECCIÓN: Un espacio aquí
-
+    const char* objectTag = "<object ";
     const char* objectEndTag = "</object>";
     size_t objectEndTagLen = strlen(objectEndTag);
 
@@ -1153,24 +1147,38 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
         char* nameTag = strstr(filePtr, "name=\"");
         if (nameTag && nameTag < objectEnd)
         {
-            bool isBH = (strncmp(nameTag + 6, "BH1", 3) == 0 || strncmp(nameTag + 6, "BH2", 3) == 0);
+            float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+            char* xStr = strstr(filePtr, "x=\"");
+            char* yStr = strstr(filePtr, "y=\"");
+            char* wStr = strstr(filePtr, "width=\"");
+            char* hStr = strstr(filePtr, "height=\"");
 
-            if (isBH)
+            bool attributesFound = xStr && yStr && wStr && hStr &&
+                xStr < objectEnd && yStr < objectEnd && wStr < objectEnd && hStr < objectEnd;
+
+            if (attributesFound)
             {
-                char* xStr = strstr(filePtr, "x=\"");
-                char* yStr = strstr(filePtr, "y=\"");
-                char* wStr = strstr(filePtr, "width=\"");
-                char* hStr = strstr(filePtr, "height=\"");
+                x = (float)atof(xStr + 3);
+                y = (float)atof(yStr + 3);
+                w = (float)atof(wStr + 7);
+                h = (float)atof(hStr + 8);
+            }
 
-                if (xStr && yStr && wStr && hStr &&
-                    xStr < objectEnd && yStr < objectEnd && wStr < objectEnd && hStr < objectEnd)
+            if (strncmp(nameTag + 6, "BH1", 3) == 0 || strncmp(nameTag + 6, "BH2", 3) == 0)
+            {
+                if (attributesFound)
                 {
-                    float x = (float)atof(xStr + 3);
-                    float y = (float)atof(yStr + 3);
-                    float w = (float)atof(wStr + 7);
-                    float h = (float)atof(hStr + 8);
                     tmxBlackHoles.push_back(Rectangle{ x, y, w, h });
                     LOG("TMX parse: Found Black Hole at (%.0f, %.0f)", x, y);
+                    objectsFound++;
+                }
+            }
+            else if (strncmp(nameTag + 6, "B1", 2) == 0 || strncmp(nameTag + 6, "B2", 2) == 0 || strncmp(nameTag + 6, "B3", 2) == 0)
+            {
+                if (attributesFound)
+                {
+                    tmxBumpers.push_back(Rectangle{ x, y, w, h });
+                    LOG("TMX parse: Found Bumper at (%.0f, %.0f)", x, y);
                     objectsFound++;
                 }
             }

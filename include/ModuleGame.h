@@ -43,7 +43,8 @@ struct MovingTarget {
 
 struct TmxPolygon {
     float x, y, rotation;
-    std::vector<int> points;
+    std::vector<int> points; // local points relative to (x,y) in TMX coords
+    int type = 0;            // 0=unknown, 1=e1 (piece1), 2=e2 (piece2)
 };
 
 class ModuleGame : public Module

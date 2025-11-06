@@ -556,6 +556,7 @@ PhysBody* ModulePhysics::CreatePolygonLoop(int x, int y, int* points, int point_
 		return nullptr;
 	}
 
+	// Create two-sided collision by adding forward and reversed chain fixtures
 	b2ChainShape chain;
 	chain.CreateLoop(filteredVertices.data(), (int)filteredVertices.size());
 
@@ -571,6 +572,17 @@ PhysBody* ModulePhysics::CreatePolygonLoop(int x, int y, int* points, int point_
 		LOG("ERROR: Failed to create fixture in CreatePolygonLoop");
 		world->DestroyBody(b);
 		return nullptr;
+	}
+
+	std::vector<b2Vec2> reversedVerts = filteredVertices;
+	std::reverse(reversedVerts.begin(), reversedVerts.end());
+	b2ChainShape chainRev;
+	chainRev.CreateLoop(reversedVerts.data(), (int)reversedVerts.size());
+	b2FixtureDef fixtureRev = fixture;
+	fixtureRev.shape = &chainRev;
+	if (!b->CreateFixture(&fixtureRev))
+	{
+		LOG("ERROR: Failed to create reversed fixture in CreatePolygonLoop");
 	}
 
 	PhysBody* pbody = new PhysBody();

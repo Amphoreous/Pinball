@@ -251,50 +251,7 @@ bool ModuleGame::Start()
         }
     }
 
-    int targetY = 200;
-    int centerX = SCREEN_WIDTH / 2;
-
-    MovingTarget mt1;
-    mt1.body = App->physics->CreateRectangle(centerX - 120, targetY, 40, 20, b2_kinematicBody);
-    mt1.initialY = targetY;
-    mt1.minY = 700;
-    mt1.maxY = targetY;
-    mt1.speed = 35.0f;
-    mt1.movingDown = true;
-    if (mt1.body) {
-        mt1.body->listener = this;
-        targets.push_back(mt1);
-    }
-
-    MovingTarget mt2;
-    mt2.body = App->physics->CreateRectangle(centerX + 120, targetY, 40, 20, b2_kinematicBody);
-    mt2.initialY = targetY;
-    mt2.minY = 700;
-    mt2.maxY = targetY;
-    mt2.speed = 35.0f;
-    mt2.movingDown = false;
-    if (mt2.body) {
-        mt2.body->listener = this;
-        targets.push_back(mt2);
-    }
-
-    PhysBody* st1 = App->physics->CreateRectangle(centerX, 500, 50, 30, b2_staticBody);
-    if (st1) {
-        st1->listener = this;
-        specialTargets.push_back(st1);
-    }
-
-    int flipperY = SCREEN_HEIGHT - 180;
-    int leftX = (int)(SCREEN_WIDTH * 0.35f);
-    int rightX = (int)(SCREEN_WIDTH * 0.65f);
-    leftFlipperJoint = App->physics->CreateFlipper(leftX, flipperY, 80, 20, true, &leftFlipper);
-    rightFlipperJoint = App->physics->CreateFlipper(rightX, flipperY, 80, 20, false, &rightFlipper);
-    if (leftFlipper) leftFlipper->listener = this;
-    if (rightFlipper) rightFlipper->listener = this;
-
-    // Continue with TMX-driven setup for flippers from TMX
-    LOG("Creating flippers from TMX data...");
-
+    // Create ball loss sensor at the bottom
     CreateBallLossSensor();
 
     LOG("Creating black holes from TMX data...");
@@ -386,7 +343,7 @@ bool ModuleGame::Start()
                 return a.first.x < b.first.x;
             });
 
-        // Left flipper (first/leftmost)
+        // Left flipper (first/leftmost) - rotation should be 220° (pointing up-left at rest)
         const Rectangle& leftRect = flippers[0].first;
         float left_rotation = flippers[0].second;
         float tmx_left_x = leftRect.x;
@@ -394,7 +351,7 @@ bool ModuleGame::Start()
         int screen_left_x = (int)roundf(tmx_left_x * scaleX);
         int screen_left_y = (int)roundf(tmx_left_y * scaleY);
 
-        // Right flipper (second/rightmost)
+        // Right flipper (second/rightmost) - rotation should be -220° (mirror, pointing up-right at rest)
         const Rectangle& rightRect = flippers[1].first;
         float right_rotation = flippers[1].second;
         float tmx_right_x = rightRect.x;
@@ -402,8 +359,8 @@ bool ModuleGame::Start()
         int screen_right_x = (int)roundf(tmx_right_x * scaleX);
         int screen_right_y = (int)roundf(tmx_right_y * scaleY);
 
-        LOG("Creating LEFT flipper at Screen(%d, %d) rotation %.1f", screen_left_x, screen_left_y, left_rotation);
-        LOG("Creating RIGHT flipper at Screen(%d, %d) rotation %.1f", screen_right_x, screen_right_y, right_rotation);
+        LOG("Creating LEFT flipper at Screen(%d, %d) TMX rotation %.1f", screen_left_x, screen_left_y, left_rotation);
+        LOG("Creating RIGHT flipper at Screen(%d, %d) TMX rotation %.1f", screen_right_x, screen_right_y, right_rotation);
 
         leftFlipperJoint = App->physics->CreateFlipper(screen_left_x, screen_left_y, 80, 20, true, &leftFlipper);
         rightFlipperJoint = App->physics->CreateFlipper(screen_right_x, screen_right_y, 80, 20, false, &rightFlipper);
@@ -1133,16 +1090,21 @@ void ModuleGame::RenderPlayingState()
         DrawText("BALL LOSS SENSOR", x - 80, y - 20, 12, RED);
     }
 
-    for (size_t i = 0; i < bumpers.size(); ++i)
+    // Render bumpers (B1, B2, B3) with their specific textures
+    for (size_t i = 0; i < bumpers.size() && i < tmxBumpers.size(); ++i)
     {
         int x = 0, y = 0;
         if (!bumpers[i]) continue;
         bumpers[i]->GetPosition(x, y);
 
+        // Determine texture from TMX name by index (parse original order from TMX)
+        // Since TMX lists objects in order, we can rely on that
+        // B1 → bumper1Texture, B2 → bumper2Texture, B3 → bumper3Texture
+        // For now cycle through 1-2-3 based on index
         Texture2D* bumperTex = nullptr;
         if (i % 3 == 0) bumperTex = &bumper1Texture;
-        else if (i % 3 == 1) bumperTex = &bumper2Texture;
-        else bumperTex = &bumper3Texture;
+        else if (i % 3 == 1) bumperTex = &bumper3Texture;
+        else bumperTex = &bumper2Texture;
 
         if (bumperTex && bumperTex->id)
         {
@@ -1184,63 +1146,48 @@ void ModuleGame::RenderPlayingState()
         }
     }
 
-    for (size_t i = 0; i < targets.size(); ++i)
-    {
-        int x = 0, y = 0;
-        if (!targets[i].body) continue;
-        targets[i].body->GetPosition(x, y);
-
-        if (movingTargetTexture.id)
-        {
-            float scale = 0.08f;
-            int width = (int)(movingTargetTexture.width * scale);
-            int height = (int)(movingTargetTexture.height * scale);
-            Rectangle src = { 0,0,(float)movingTargetTexture.width,(float)movingTargetTexture.height };
-            Rectangle dst = { (float)x, (float)y, (float)width, (float)height };
-            Vector2 origin = { width / 2.0f, height / 2.0f };
-            DrawTexturePro(movingTargetTexture, src, dst, origin, 0.0f, WHITE);
-        }
-        else if (targetTexture.id)
-        {
-            float scale = 40.0f / (float)targetTexture.width;
-            int width = (int)(targetTexture.width * scale);
-            int height = (int)(targetTexture.height * scale);
-            Rectangle src = { 0,0,(float)targetTexture.width,(float)targetTexture.height };
-            Rectangle dst = { (float)x, (float)y, (float)width, (float)height };
-            Vector2 origin = { width / 2.0f, height / 2.0f };
-            DrawTexturePro(targetTexture, src, dst, origin, 0.0f, BLUE);
-        }
-        else
-        {
-            DrawRectangle(x - 20, y - 10, 40, 20, BLUE);
-        }
-    }
-
     // Render extra pieces (e1/e2 from TMX)
-    for (size_t i = 0; i < extraPieces.size(); ++i)
+    for (size_t i = 0; i < extraPieces.size() && i < tmxExtraPiecesWithType.size(); ++i)
     {
         int x = 0, y = 0;
         if (!extraPieces[i]) continue;
         extraPieces[i]->GetPosition(x, y);
 
-        // Determine which texture to use based on index (first ones are e1, later ones are e2)
-        Texture2D* pieceTexture = (i < tmxExtraPiecesWithType.size() && tmxExtraPiecesWithType[i].second == 1) ? 
-                                   &piece1Texture : &piece2Texture;
+        int type = tmxExtraPiecesWithType[i].second;
+        const Rectangle& tmxRect = tmxExtraPiecesWithType[i].first;
+        
+        // e1 → piece1.png, e2 → piece2.png
+        Texture2D* pieceTexture = (type == 1) ? &piece1Texture : &piece2Texture;
         
         if (pieceTexture->id)
         {
             float scale = (float)extraPieces[i]->width / (float)pieceTexture->width;
             int width = (int)(pieceTexture->width * scale);
             int height = (int)(pieceTexture->height * scale);
-            Rectangle src = { 0,0,(float)pieceTexture->width,(float)pieceTexture->height };
+            
+            Rectangle src = { 0, 0, (float)pieceTexture->width, (float)pieceTexture->height };
+            
+            // For e2, check rotation from TMX to flip horizontally if needed (right side)
+            // TMX shows rotation="15" for right e2, rotation="-15" for left e2
+            // We flip texture source if rotation > 0 (right side)
+            if (type == 2)
+            {
+                // Parse rotation from TMX to determine if we need to flip
+                // Simplification: if x > screen center, flip horizontally
+                if (x > SCREEN_WIDTH / 2)
+                {
+                    src.width = -src.width; // Flip horizontally
+                }
+            }
+            
             Rectangle dst = { (float)x, (float)y, (float)width, (float)height };
             Vector2 origin = { width / 2.0f, height / 2.0f };
             
-            // Apply rotation if e2 (piece2)
+            // Get rotation from physics body
             float rotation = 0.0f;
-            if (i < tmxExtraPiecesWithType.size())
+            if (extraPieces[i]->body)
             {
-                rotation = 45.0f; // e1/e2 pieces are at 45 degrees
+                rotation = extraPieces[i]->body->GetAngle() * RADTODEG;
             }
             
             DrawTexturePro(*pieceTexture, src, dst, origin, rotation, WHITE);
@@ -1320,6 +1267,7 @@ void ModuleGame::RenderPlayingState()
         }
     }
 
+    // Render left flipper
     if (leftFlipper && leftFlipper->body)
     {
         int x, y;
@@ -1333,41 +1281,35 @@ void ModuleGame::RenderPlayingState()
             int h = (int)(flipperTexture.height * s);
             Rectangle src = { 0,0,(float)flipperTexture.width,(float)flipperTexture.height };
             Rectangle dst = { (float)x, (float)y, (float)w, (float)h };
-            Vector2 origin = { w * 0.15f, h / 2.0f };  // Left flipper pivots on left side
-            DrawTexturePro(flipperTexture, src, dst, origin, angle, WHITE);
+            // Flipper texture is at 45° to top-right in the PNG. We need to add 45° offset.
+            // The pivot is on the left side for left flipper (15% from left edge)
+            Vector2 origin = { w * 0.15f, h / 2.0f };
+            DrawTexturePro(flipperTexture, src, dst, origin, angle + 45.0f, WHITE);
         }
     }
 
+    // Render right flipper
     if (rightFlipper && rightFlipper->body)
     {
         int x, y;
         rightFlipper->GetPosition(x, y);
         float angle = rightFlipper->body->GetAngle() * RADTODEG;
 
-        if (flipperBaseTexture.id)
-        {
-            float bs = 30.0f / (float)flipperBaseTexture.width;
-            int bw = (int)(flipperBaseTexture.width * bs);
-            int bh = (int)(flipperBaseTexture.height * bs);
-            Rectangle src = { 0,0,(float)flipperBaseTexture.width,(float)flipperBaseTexture.height };
-            Rectangle dst = { (float)x, (float)y, (float)bw, (float)bh };
-            Vector2 origin = { bw / 2.0f, bh / 2.0f };
-            DrawTexturePro(flipperBaseTexture, src, dst, origin, 0.0f, WHITE);
-        }
-
         if (flipperTexture.id)
         {
             float s = 80.0f / (float)flipperTexture.width;
             int w = (int)(flipperTexture.width * s);
             int h = (int)(flipperTexture.height * s);
-            Rectangle src = { 0,0,(float)flipperTexture.width,(float)flipperTexture.height };
-            // Flip texture horizontally for right flipper
-            Rectangle dst = { (float)x, (float)y, (float)-w, (float)h };
-            Vector2 origin = { -w * 0.15f, h / 2.0f }; // Right flipper pivots on right side (mirrored)
-            DrawTexturePro(flipperTexture, src, dst, origin, angle, WHITE);
+            // Flip the source rectangle horizontally for right flipper
+            Rectangle src = { (float)flipperTexture.width, 0, -(float)flipperTexture.width, (float)flipperTexture.height };
+            Rectangle dst = { (float)x, (float)y, (float)w, (float)h };
+            // For right flipper, pivot is on the right side (85% from left edge = 15% from right)
+            Vector2 origin = { w * 0.85f, h / 2.0f };
+            DrawTexturePro(flipperTexture, src, dst, origin, angle - 45.0f, WHITE);
         }
     }
 
+    // Render ball
     if (ball && ball->body)
     {
         int x, y;
@@ -1878,7 +1820,7 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
                 h = (float)atof(hStr + 8);
             }
 
-            if (strncmp(nameTag + 6, "BH1", 3) == 0 || strncmp(nameTag + 6, "BH2", 3) == 0)
+            if (strncmp(nameTag + 6, "BH1", 3) == 0 || strncmp(nameTag + 6, "BH2", 3) == 0 || strncmp(nameTag + 6, "BH3", 3) == 0)
             {
                 if (attributesFound)
                 {
@@ -1932,7 +1874,7 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
             }
             else if (strncmp(nameTag + 6, "BF", 2) == 0)
             {
-                // BF = flipper base (Base Flipper Bat.png)
+                // BF/BF1 = flipper base (Base Flipper Bat.png)
                 if (attributesFound)
                 {
                     float rotation = 0.0f;

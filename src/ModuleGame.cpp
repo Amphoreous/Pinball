@@ -180,13 +180,18 @@ bool ModuleGame::Start()
     LOG("Creating bumpers from TMX data...");
     for (const auto& bRect : tmxBumpers)
     {
-        float tmx_cx = bRect.x + (bRect.width / 2.0f);
-        float tmx_cy = bRect.y + (bRect.height / 2.0f);
-        float tmx_radius = bRect.width / 2.0f;
+        // **CLAVE: Aplicar escalado UNA SOLA VEZ aquí**
+        float tmx_cx = (bRect.x + (bRect.width / 2.0f)) * scaleX;
+        float tmx_cy = (bRect.y + (bRect.height / 2.0f)) * scaleY;
+        float tmx_radius = (bRect.width / 2.0f) * scaleX;
 
-        int screen_x = (int)roundf(tmx_cx * scaleX);
-        int screen_y = (int)roundf(tmx_cy * scaleY);
-        int screen_radius = (int)roundf(tmx_radius * scaleX);
+        int screen_x = (int)roundf(tmx_cx);
+        int screen_y = (int)roundf(tmx_cy);
+        int screen_radius = (int)roundf(tmx_radius);
+
+        LOG("Creating Bumper: TMX(%.1f, %.1f, r=%.1f) -> Screen(%d, %d, r=%d)",
+            bRect.x + bRect.width / 2, bRect.y + bRect.height / 2, bRect.width / 2,
+            screen_x, screen_y, screen_radius);
 
         PhysBody* b = App->physics->CreateCircle(screen_x, screen_y, screen_radius, b2_staticBody);
         if (b)
@@ -195,6 +200,42 @@ bool ModuleGame::Start()
                 b->body->GetFixtureList()->SetRestitution(1.5f);
             b->listener = this;
             bumpers.push_back(b);
+        }
+    }
+
+    LOG("Creating special polygons from TMX data...");
+    for (const auto& poly : tmxSpecialPolygons)
+    {
+        // **CLAVE: Aplicar escalado UNA SOLA VEZ aquí**
+        int screen_x = (int)roundf(poly.x * scaleX);
+        int screen_y = (int)roundf(poly.y * scaleY);
+        float rotation_rad = poly.rotation * DEGTORAD;
+
+        // Escalar los puntos también
+        std::vector<int> scaledPoints;
+        for (size_t i = 0; i < poly.points.size(); i += 2)
+        {
+            scaledPoints.push_back((int)roundf(poly.points[i] * scaleX));
+            scaledPoints.push_back((int)roundf(poly.points[i + 1] * scaleY));
+        }
+
+        LOG("Creating Special Polygon: TMX(%.0f, %.0f) -> Screen(%d, %d) with %d points, rotation %.2f rad",
+            poly.x, poly.y, screen_x, screen_y, (int)scaledPoints.size() / 2, rotation_rad);
+
+        PhysBody* p = App->physics->CreatePolygonLoop(screen_x, screen_y,
+            scaledPoints.data(), (int)scaledPoints.size(),
+            b2_staticBody, rotation_rad);
+
+        if (p)
+        {
+            if (p->body && p->body->GetFixtureList())
+                p->body->GetFixtureList()->SetRestitution(1.5f);
+            p->listener = this;
+            specialPolygons.push_back(p);
+        }
+        else
+        {
+            LOG("Warning: Failed to create special polygon at (%d, %d)", screen_x, screen_y);
         }
     }
 
@@ -244,15 +285,18 @@ bool ModuleGame::Start()
     LOG("Creating black holes from TMX data...");
     for (const auto& bhRect : tmxBlackHoles)
     {
-        float tmx_cx = bhRect.x + (bhRect.width / 2.0f);
-        float tmx_cy = bhRect.y + (bhRect.height / 2.0f);
-        float tmx_radius = bhRect.width / 2.0f;
+        // **CLAVE: Aplicar escalado UNA SOLA VEZ aquí**
+        float tmx_cx = (bhRect.x + (bhRect.width / 2.0f)) * scaleX;
+        float tmx_cy = (bhRect.y + (bhRect.height / 2.0f)) * scaleY;
+        float tmx_radius = (bhRect.width / 2.0f) * scaleX;
 
-        int screen_x = (int)roundf(tmx_cx * scaleX);
-        int screen_y = (int)roundf(tmx_cy * scaleY);
-        int screen_radius = (int)roundf(tmx_radius * scaleX);
+        int screen_x = (int)roundf(tmx_cx);
+        int screen_y = (int)roundf(tmx_cy);
+        int screen_radius = (int)roundf(tmx_radius);
 
-        LOG("Creating Black Hole TMX(%.0f, %.0f, r=%.0f) -> Screen(%d, %d, r=%d)", tmx_cx, tmx_cy, tmx_radius, screen_x, screen_y, screen_radius);
+        LOG("Creating Black Hole: TMX(%.0f, %.0f, r=%.0f) -> Screen(%d, %d, r=%d)",
+            bhRect.x + bhRect.width / 2, bhRect.y + bhRect.height / 2, bhRect.width / 2,
+            screen_x, screen_y, screen_radius);
 
         PhysBody* bh = App->physics->CreateCircle(screen_x, screen_y, screen_radius, b2_staticBody);
         if (bh)
@@ -340,10 +384,12 @@ bool ModuleGame::CleanUp()
 
     bumpers.clear();
     specialTargets.clear();
+    specialPolygons.clear();
     blackHoles.clear();
     mapCollisionPoints.clear();
     tmxBlackHoles.clear();
     tmxBumpers.clear();
+    tmxSpecialPolygons.clear();
 
     return true;
 }
@@ -585,6 +631,12 @@ CollisionType ModuleGame::IdentifyCollision(PhysBody* bodyA, PhysBody* bodyB)
             return COLLISION_BLACK_HOLE;
     }
 
+    for (size_t i = 0; i < specialPolygons.size(); ++i)
+    {
+        if (specialPolygons[i] && (bodyA == specialPolygons[i] || bodyB == specialPolygons[i]))
+            return COLLISION_SPECIAL_POLYGON;
+    }
+
     for (size_t i = 0; i < bumpers.size(); ++i)
     {
         if (bumpers[i] && (bodyA == bumpers[i] || bodyB == bumpers[i]))
@@ -638,6 +690,24 @@ void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
         case COLLISION_BALL_LOSS_SENSOR:
         {
             ballLossTimer = 0.1f;
+            break;
+        }
+
+        case COLLISION_SPECIAL_POLYGON:
+        {
+            if (ball && ball->body)
+            {
+                b2Vec2 vel = ball->body->GetLinearVelocity();
+                vel *= 1.3f;
+                ball->body->SetLinearVelocity(vel);
+
+                if (bumperHitSfx >= 0)
+                {
+                    App->audio->PlayBumperHit(impactForce);
+                }
+
+                AddScore(TARGET_BUMPER, "Special Bumper");
+            }
             break;
         }
 
@@ -1068,6 +1138,52 @@ void ModuleGame::RenderPlayingState()
         else
         {
             DrawCircle(x, y, 15, PURPLE);
+        }
+    }
+
+    if (!showDebug)
+    {
+        const int TMX_MAP_W = 1280;
+        const int TMX_MAP_H = 1600;
+        float scaleX = (float)SCREEN_WIDTH / (float)TMX_MAP_W;
+        float scaleY = (float)SCREEN_HEIGHT / (float)TMX_MAP_H;
+
+        for (size_t i = 0; i < specialPolygons.size(); ++i)
+        {
+            if (!specialPolygons[i] || !specialPolygons[i]->body || i >= tmxSpecialPolygons.size()) continue;
+
+            PhysBody* pBody = specialPolygons[i];
+            const TmxPolygon& tmxPoly = tmxSpecialPolygons[i];
+
+            int x, y;
+            pBody->GetPosition(x, y);
+            float angle_rad = pBody->body->GetAngle();
+
+            Vector2 center = { (float)x, (float)y };
+
+            std::vector<Vector2> screenPoints;
+            for (size_t j = 0; j < tmxPoly.points.size(); j += 2)
+            {
+                // Aplicamos escalado a los puntos relativos del TMX
+                float localX = tmxPoly.points[j] * scaleX;
+                float localY = tmxPoly.points[j + 1] * scaleY;
+
+                // Aplicamos rotación
+                float rotatedX = localX * cosf(angle_rad) - localY * sinf(angle_rad);
+                float rotatedY = localX * sinf(angle_rad) + localY * cosf(angle_rad);
+
+                // Sumamos la posición central (ya escalada)
+                screenPoints.push_back(Vector2{ center.x + rotatedX, center.y + rotatedY });
+            }
+
+            // Dibujamos el polígono
+            if (screenPoints.size() > 1)
+            {
+                for (size_t j = 0; j < screenPoints.size(); ++j)
+                {
+                    DrawLineV(screenPoints[j], screenPoints[(j + 1) % screenPoints.size()], PURPLE);
+                }
+            }
         }
     }
 
@@ -1587,6 +1703,7 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
     mapCollisionPoints.clear();
     tmxBlackHoles.clear();
     tmxBumpers.clear();
+    tmxSpecialPolygons.clear();
 
     char* filePtr = fileContent;
     int objectsFound = 0;
@@ -1594,6 +1711,8 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
     const char* objectTag = "<object ";
     const char* objectEndTag = "</object>";
     size_t objectEndTagLen = strlen(objectEndTag);
+
+    LOG("TMX Map parsing: Will scale later in physics creation");
 
     while ((filePtr = strstr(filePtr, objectTag)) != nullptr)
     {
@@ -1607,8 +1726,15 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
         }
 
         char* nameTag = strstr(filePtr, "name=\"");
+        bool isSpecialPoly = false;
+
         if (nameTag && nameTag < objectEnd)
         {
+            if (strncmp(nameTag + 6, "e1", 2) == 0 || strncmp(nameTag + 6, "e2", 2) == 0)
+            {
+                isSpecialPoly = true;
+            }
+
             float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
             char* xStr = strstr(filePtr, "x=\"");
             char* yStr = strstr(filePtr, "y=\"");
@@ -1630,8 +1756,9 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
             {
                 if (attributesFound)
                 {
+                    // **CLAVE: Guardar coordenadas TMX SIN escalar**
                     tmxBlackHoles.push_back(Rectangle{ x, y, w, h });
-                    LOG("TMX parse: Found Black Hole at (%.0f, %.0f)", x, y);
+                    LOG("TMX parse: Found Black Hole at TMX(%.0f, %.0f, %.0fx%.0f)", x, y, w, h);
                     objectsFound++;
                 }
             }
@@ -1639,8 +1766,9 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
             {
                 if (attributesFound)
                 {
+                    // **CLAVE: Guardar coordenadas TMX SIN escalar**
                     tmxBumpers.push_back(Rectangle{ x, y, w, h });
-                    LOG("TMX parse: Found Bumper at (%.0f, %.0f)", x, y);
+                    LOG("TMX parse: Found Bumper at TMX(%.0f, %.0f, %.0fx%.0f)", x, y, w, h);
                     objectsFound++;
                 }
             }
@@ -1680,12 +1808,67 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
                         if (token == NULL) break;
                         float py = (float)atof(token);
 
+                        // **CLAVE: Guardar coordenadas TMX SIN escalar**
                         mapCollisionPoints.push_back((int)(offsetX + px));
                         mapCollisionPoints.push_back((int)(offsetY + py));
                         token = strtok(NULL, " ,");
                     }
                     free(pointsStr);
-                    LOG("Loaded %d collision points from TMX", (int)mapCollisionPoints.size());
+                    LOG("Loaded polyline with %d points (offset: %.0f,%.0f)",
+                        (int)mapCollisionPoints.size() / 2, offsetX, offsetY);
+                    objectsFound++;
+                }
+            }
+        }
+
+        const char* polygonMarker = "<polygon points=\"";
+        char* polygonStart = strstr(filePtr, polygonMarker);
+
+        if (isSpecialPoly && polygonStart && polygonStart < objectEnd)
+        {
+            char* xPosStr = strstr(filePtr, "x=\"");
+            char* yPosStr = strstr(filePtr, "y=\"");
+            char* rotStr = strstr(filePtr, "rotation=\"");
+
+            float offsetX = (xPosStr && xPosStr < polygonStart) ? (float)atof(xPosStr + 3) : 0.0f;
+            float offsetY = (yPosStr && yPosStr < polygonStart) ? (float)atof(yPosStr + 3) : 0.0f;
+            float rotation = (rotStr && rotStr < polygonStart) ? (float)atof(rotStr + 10) : 0.0f;
+
+            polygonStart += strlen(polygonMarker);
+            char* polygonEnd = strchr(polygonStart, '"');
+            if (polygonEnd)
+            {
+                size_t pointsLen = polygonEnd - polygonStart;
+                char* pointsStr = (char*)malloc(pointsLen + 1);
+
+                if (pointsStr)
+                {
+                    strncpy(pointsStr, polygonStart, pointsLen);
+                    pointsStr[pointsLen] = '\0';
+
+                    TmxPolygon poly;
+                    // **CLAVE: Guardar coordenadas TMX SIN escalar**
+                    poly.x = offsetX;
+                    poly.y = offsetY;
+                    poly.rotation = rotation;
+
+                    char* token = strtok(pointsStr, " ,");
+                    while (token != NULL)
+                    {
+                        float px = (float)atof(token);
+                        token = strtok(NULL, " ,");
+                        if (token == NULL) break;
+                        float py = (float)atof(token);
+
+                        // **CLAVE: Guardar coordenadas TMX SIN escalar**
+                        poly.points.push_back((int)px);
+                        poly.points.push_back((int)py);
+                        token = strtok(NULL, " ,");
+                    }
+                    free(pointsStr);
+                    tmxSpecialPolygons.push_back(poly);
+                    LOG("TMX parse: Found Special Polygon at TMX(%.0f, %.0f) with %d points, rotation %.0f",
+                        offsetX, offsetY, (int)poly.points.size() / 2, rotation);
                     objectsFound++;
                 }
             }
@@ -1707,9 +1890,9 @@ void ModuleGame::CreateMapCollision()
         return;
     }
 
+    // **CLAVE: Aplicar escalado UNA SOLA VEZ aquí**
     const int TMX_MAP_W = 1280;
     const int TMX_MAP_H = 1600;
-
     float scaleX = (float)SCREEN_WIDTH / (float)TMX_MAP_W;
     float scaleY = (float)SCREEN_HEIGHT / (float)TMX_MAP_H;
 
@@ -1724,6 +1907,13 @@ void ModuleGame::CreateMapCollision()
         scaledPoints.push_back(scaledY);
     }
 
+    LOG("Creating map collision with %d points: first few TMX(%.0f,%.0f) -> Screen(%d,%d)",
+        (int)scaledPoints.size() / 2,
+        mapCollisionPoints.size() > 0 ? (float)mapCollisionPoints[0] : 0.0f,
+        mapCollisionPoints.size() > 1 ? (float)mapCollisionPoints[1] : 0.0f,
+        scaledPoints.size() > 0 ? scaledPoints[0] : 0,
+        scaledPoints.size() > 1 ? scaledPoints[1] : 0);
+
     mapBoundary = App->physics->CreateChain(0, 0,
         scaledPoints.data(),
         (int)scaledPoints.size(),
@@ -1732,6 +1922,10 @@ void ModuleGame::CreateMapCollision()
     if (!mapBoundary)
     {
         LOG("Failed to create map collision");
+    }
+    else
+    {
+        LOG("Map collision created successfully");
     }
 }
 

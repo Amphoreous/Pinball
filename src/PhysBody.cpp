@@ -14,9 +14,8 @@ PhysBody::~PhysBody()
 void PhysBody::GetPosition(int& x, int& y) const
 {
 	b2Vec2 pos = body->GetPosition();
-	x = (int)(pos.x * METERS_TO_PIXELS);
-	// Convert Box2D coords (Y-up) to screen coords (Y-down)
-	y = SCREEN_HEIGHT - (int)(pos.y * METERS_TO_PIXELS);
+	x = METERS_TO_PIXELS * pos.x;
+	y = SCREEN_HEIGHT - (METERS_TO_PIXELS * pos.y);
 }
 
 float PhysBody::GetRotation() const

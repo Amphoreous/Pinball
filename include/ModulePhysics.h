@@ -1,13 +1,14 @@
 #pragma once
-
 #include "Module.h"
 #include "Globals.h"
+#include "box2d/box2d.h"
+#include <vector>
 
-#include "box2d\box2d.h"
+#define GRAVITY_X 0.0f
+#define GRAVITY_Y -10.0f
 
 class PhysBody;
 
-// Module --------------------------------------
 class ModulePhysics : public Module, public b2ContactListener
 {
 public:
@@ -19,27 +20,24 @@ public:
 	update_status PostUpdate();
 	bool CleanUp();
 
-	// Factory methods to create physics bodies
-	PhysBody* CreateCircle(int x, int y, int radius, b2BodyType type = b2_dynamicBody);
-	PhysBody* CreateRectangle(int x, int y, int width, int height, b2BodyType type = b2_staticBody);
+	PhysBody* CreateCircle(int x, int y, int radius, b2BodyType type);
+	PhysBody* CreateRectangle(int x, int y, int width, int height, b2BodyType type);
 	PhysBody* CreateRectangleSensor(int x, int y, int width, int height);
-	PhysBody* CreateChain(int x, int y, const int* points, int size, b2BodyType type = b2_staticBody);
-	
-	// Create flipper with revolute joint
-	b2RevoluteJoint* CreateFlipper(int x, int y, int width, int height, bool isLeft, PhysBody** outBody);
-	
-	// Collision callbacks from b2ContactListener
+	PhysBody* CreateChain(int x, int y, int* points, int point_count, b2BodyType type);
+	PhysBody* CreatePolygonLoop(int x, int y, int* points, int point_count, b2BodyType type, float angle_rad = 0.0f);
+
+
+	b2RevoluteJoint* CreateFlipper(int x, int y, int width, int height, bool isLeft, PhysBody** flipperBody);
+
 	void BeginContact(b2Contact* contact) override;
-	void EndContact(b2Contact* contact) override;
-	
-	// Access to Box2D world
-	b2World* GetWorld() { return world; }
+	b2World* GetWorld();
 
 private:
-
-	bool debug;
+	bool debug = false;
 	b2World* world = nullptr;
-	b2MouseJoint* mouse_joint = nullptr;
+	b2MouseJoint* mouseJoint = nullptr;
 	b2Body* ground = nullptr;
-	
+	b2Body* mouseBody = nullptr;
+
+	std::vector<PhysBody*> bodiesToDestroy;
 };

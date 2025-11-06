@@ -21,7 +21,8 @@ enum CollisionType
     COLLISION_COMBO_LETTER,
     COLLISION_SPECIAL_TARGET,
     COLLISION_BALL_LOSS_SENSOR,
-    COLLISION_BLACK_HOLE
+    COLLISION_BLACK_HOLE,
+    COLLISION_SPECIAL_POLYGON
 };
 
 struct StarLetter {
@@ -29,6 +30,11 @@ struct StarLetter {
     char letter;
     bool collected;
     float spawnTime;
+};
+
+struct TmxPolygon {
+    float x, y, rotation;
+    std::vector<int> points;
 };
 
 class ModuleGame : public Module
@@ -102,6 +108,7 @@ public:
     std::vector<PhysBody*> targets;
     std::vector<PhysBody*> specialTargets;
     std::vector<PhysBody*> blackHoles;
+    std::vector<PhysBody*> specialPolygons;
     std::vector<StarLetter> starLetters;
     std::vector<PhysBody*> bodiesToDestroy;
 
@@ -117,6 +124,7 @@ public:
     Texture2D targetTexture = { 0 };
     Texture2D specialTargetTexture = { 0 };
     Texture2D blackHoleTexture = { 0 };
+    Texture2D specialPolygonTexture = { 0 };
     Texture2D letterSTexture = { 0 };
     Texture2D letterTTexture = { 0 };
     Texture2D letterATexture = { 0 };
@@ -135,8 +143,8 @@ public:
     bool ballLaunched = false;
     float kickerForce = 0.0f;
     float kickerChargeTime = 0.0f;
-    const float MAX_KICKER_FORCE = 80.0f;      // Increased from 45.0f for more power
-    const float KICKER_CHARGE_SPEED = 50.0f;   // Increased from 30.0f for faster charging
+    const float MAX_KICKER_FORCE = 80.0f;
+    const float KICKER_CHARGE_SPEED = 50.0f;
 
     int bumperHitSfx = -1;
     int launchSfx = -1;
@@ -149,6 +157,7 @@ public:
     std::vector<int> mapCollisionPoints;
     std::vector<Rectangle> tmxBlackHoles;
     std::vector<Rectangle> tmxBumpers;
+    std::vector<TmxPolygon> tmxSpecialPolygons;
     PhysBody* mapBoundary = nullptr;
 
     float scoreFlashTimer = 0.0f;

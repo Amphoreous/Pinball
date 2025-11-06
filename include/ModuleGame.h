@@ -24,6 +24,13 @@ enum CollisionType
     COLLISION_BLACK_HOLE
 };
 
+struct StarLetter {
+    PhysBody* body;
+    char letter;
+    bool collected;
+    float spawnTime;
+};
+
 class ModuleGame : public Module
 {
 public:
@@ -47,18 +54,22 @@ public:
     void RenderPlayingState();
     void RenderPausedState();
     void RenderGameOverState();
-    void RenderYouWinState(); // Nueva función
+    void RenderYouWinState();
 
     void UpdateMenuState();
     void UpdatePlayingState();
     void UpdatePausedState();
     void UpdateGameOverState();
-    void UpdateYouWinState(); // Nueva función
+    void UpdateYouWinState();
 
     void LaunchBall();
     void LoseBall();
     void RespawnBall();
     void AddComboLetter(char letter);
+    void SpawnStarLetter();
+    void CollectStarLetter(char letter);
+    void ResetStarCombo();
+    void CompleteStarCombo();
 
     void AddScore(int points, const char* source);
     void SaveHighScore();
@@ -91,6 +102,8 @@ public:
     std::vector<PhysBody*> targets;
     std::vector<PhysBody*> specialTargets;
     std::vector<PhysBody*> blackHoles;
+    std::vector<StarLetter> starLetters;
+    std::vector<PhysBody*> bodiesToDestroy;
 
     Texture2D ballTexture = { 0 };
     Texture2D backgroundTexture = { 0 };
@@ -104,6 +117,10 @@ public:
     Texture2D targetTexture = { 0 };
     Texture2D specialTargetTexture = { 0 };
     Texture2D blackHoleTexture = { 0 };
+    Texture2D letterSTexture = { 0 };
+    Texture2D letterTTexture = { 0 };
+    Texture2D letterATexture = { 0 };
+    Texture2D letterRTexture = { 0 };
 
     Texture2D titleTexture = { 0 };
 
@@ -126,6 +143,7 @@ public:
     int targetHitSfx = -1;
     int specialHitSfx = -1;
     int ballLostSfx = -1;
+    int letterCollectSfx = -1;
 
     std::vector<int> mapCollisionPoints;
     std::vector<Rectangle> tmxBlackHoles;
@@ -137,6 +155,8 @@ public:
     int lastScoreIncrease = 0;
 
     float ballLossTimer = 0.0f;
+    float starLetterSpawnTimer = 0.0f;
+    const float STAR_LETTER_SPAWN_INTERVAL = 5.0f;
 
     float ballSavedPosX = 0.0f, ballSavedPosY = 0.0f;
     float ballSavedVelX = 0.0f, ballSavedVelY = 0.0f;

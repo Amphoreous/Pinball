@@ -31,6 +31,10 @@ ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start
     piece2Texture = { 0 };
     targetTexture = { 0 };
     specialTargetTexture = { 0 };
+    letterSTexture = { 0 };
+    letterTTexture = { 0 };
+    letterATexture = { 0 };
+    letterRTexture = { 0 };
 
     font = { 0 };
     titleFont = { 0 };
@@ -50,6 +54,7 @@ ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start
     lastScoreIncrease = 0;
 
     ballLossTimer = 0.0f;
+    starLetterSpawnTimer = 0.0f;
 
     ballSavedPosX = 0.0f;
     ballSavedPosY = 0.0f;
@@ -59,6 +64,9 @@ ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start
     ballSavedAwake = false;
 
     isGamePaused = false;
+
+    memset(&gameData, 0, sizeof(GameData));
+    strcpy_s(gameData.comboLetters, 5, "STAR");
 }
 
 ModuleGame::~ModuleGame()
@@ -106,6 +114,11 @@ bool ModuleGame::Start()
     targetTexture = LoadTexture("assets/extra/piece1.png");
     specialTargetTexture = LoadTexture("assets/extra/piece2.png");
 
+    letterSTexture = LoadTexture("assets/letters/S.png");
+    letterTTexture = LoadTexture("assets/letters/T.png");
+    letterATexture = LoadTexture("assets/letters/A.png");
+    letterRTexture = LoadTexture("assets/letters/R.png");
+
     titleTexture = LoadTexture("assets/UI/title.png");
     if (titleTexture.id == 0) LOG("Warning: Failed to load title texture");
 
@@ -114,6 +127,7 @@ bool ModuleGame::Start()
     targetHitSfx = App->audio->LoadFx("assets/audio/target_hit.wav");
     specialHitSfx = App->audio->LoadFx("assets/audio/bonus_sound.wav");
     ballLostSfx = App->audio->LoadFx("assets/audio/flipper_hit.wav");
+    letterCollectSfx = App->audio->LoadFx("assets/audio/bonus_sound.wav");
 
     LoadAudioSettings();
     LoadHighScore();
@@ -127,7 +141,7 @@ bool ModuleGame::Start()
         LOG("Warning: Could not load TMX map");
     }
 
-    ball = App->physics->CreateCircle(2.0f * METERS_TO_PIXELS, 8.7f * METERS_TO_PIXELS, 15, b2_dynamicBody);
+    ball = App->physics->CreateCircle((int)(2.0f * METERS_TO_PIXELS), (int)(8.7f * METERS_TO_PIXELS), 15, b2_dynamicBody);
 
     if (ball)
     {
@@ -258,8 +272,26 @@ bool ModuleGame::CleanUp()
     if (piece2Texture.id) UnloadTexture(piece2Texture);
     if (targetTexture.id) UnloadTexture(targetTexture);
     if (specialTargetTexture.id) UnloadTexture(specialTargetTexture);
+    if (letterSTexture.id) UnloadTexture(letterSTexture);
+    if (letterTTexture.id) UnloadTexture(letterTTexture);
+    if (letterATexture.id) UnloadTexture(letterATexture);
+    if (letterRTexture.id) UnloadTexture(letterRTexture);
     if (titleTexture.id) UnloadTexture(titleTexture);
     if (titleFont.texture.id) UnloadFont(titleFont);
+
+    for (auto& starLetter : starLetters) {
+        if (starLetter.body && starLetter.body->body) {
+            App->physics->GetWorld()->DestroyBody(starLetter.body->body);
+        }
+    }
+    starLetters.clear();
+
+    for (auto body : bodiesToDestroy) {
+        if (body && body->body) {
+            App->physics->GetWorld()->DestroyBody(body->body);
+        }
+    }
+    bodiesToDestroy.clear();
 
     bumpers.clear();
     targets.clear();
@@ -275,6 +307,14 @@ bool ModuleGame::CleanUp()
 update_status ModuleGame::Update()
 {
     float dt = GetFrameTime();
+
+    for (auto it = bodiesToDestroy.begin(); it != bodiesToDestroy.end(); ) {
+        PhysBody* body = *it;
+        if (body && body->body) {
+            App->physics->GetWorld()->DestroyBody(body->body);
+        }
+        it = bodiesToDestroy.erase(it);
+    }
 
     if (ballLossTimer > 0)
     {
@@ -308,6 +348,29 @@ update_status ModuleGame::Update()
         UpdateAudioSettings();
         DrawAudioSettings();
         return UPDATE_CONTINUE;
+    }
+
+    if (gameData.currentState == STATE_PLAYING)
+    {
+        starLetterSpawnTimer += dt;
+        if (starLetterSpawnTimer >= STAR_LETTER_SPAWN_INTERVAL)
+        {
+            SpawnStarLetter();
+            starLetterSpawnTimer = 0.0f;
+        }
+
+        for (auto it = starLetters.begin(); it != starLetters.end(); ) {
+            if (it->collected || it->spawnTime > 8.0f) {
+                if (it->body) {
+                    bodiesToDestroy.push_back(it->body);
+                }
+                it = starLetters.erase(it);
+            }
+            else {
+                it->spawnTime += dt;
+                ++it;
+            }
+        }
     }
 
     switch (gameData.currentState)
@@ -428,34 +491,45 @@ float ModuleGame::CalculateImpactForce(PhysBody* body)
 
 CollisionType ModuleGame::IdentifyCollision(PhysBody* bodyA, PhysBody* bodyB)
 {
+    if (!bodyA || !bodyB) {
+        return COLLISION_WALL;
+    }
+
     if (bodyA == ballLossSensor || bodyB == ballLossSensor)
         return COLLISION_BALL_LOSS_SENSOR;
 
     for (size_t i = 0; i < blackHoles.size(); ++i)
     {
-        if (bodyA == blackHoles[i] || bodyB == blackHoles[i])
+        if (blackHoles[i] && (bodyA == blackHoles[i] || bodyB == blackHoles[i]))
             return COLLISION_BLACK_HOLE;
     }
 
     for (size_t i = 0; i < bumpers.size(); ++i)
     {
-        if (bodyA == bumpers[i] || bodyB == bumpers[i])
+        if (bumpers[i] && (bodyA == bumpers[i] || bodyB == bumpers[i]))
             return COLLISION_BUMPER;
     }
 
     for (size_t i = 0; i < targets.size(); ++i)
     {
-        if (bodyA == targets[i] || bodyB == targets[i])
+        if (targets[i] && (bodyA == targets[i] || bodyB == targets[i]))
             return COLLISION_TARGET;
     }
 
     for (size_t i = 0; i < specialTargets.size(); ++i)
     {
-        if (bodyA == specialTargets[i] || bodyB == specialTargets[i])
+        if (specialTargets[i] && (bodyA == specialTargets[i] || bodyB == specialTargets[i]))
             return COLLISION_SPECIAL_TARGET;
     }
 
-    if (bodyB == leftFlipper || bodyB == rightFlipper)
+    for (size_t i = 0; i < starLetters.size(); ++i)
+    {
+        if (starLetters[i].body && (bodyA == starLetters[i].body || bodyB == starLetters[i].body))
+            return COLLISION_COMBO_LETTER;
+    }
+
+    if ((leftFlipper && (bodyA == leftFlipper || bodyB == leftFlipper)) ||
+        (rightFlipper && (bodyA == rightFlipper || bodyB == rightFlipper)))
         return COLLISION_FLIPPER;
 
     return COLLISION_WALL;
@@ -465,10 +539,16 @@ void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
 {
     if (!bodyA || !bodyB) return;
 
-    CollisionType type = IdentifyCollision(bodyA, bodyB);
-    bool ballInvolved = (bodyA == ball || bodyB == ball);
+    PhysBody* ballBody = (bodyA == ball) ? bodyA : (bodyB == ball) ? bodyB : nullptr;
+    PhysBody* otherBody = (ballBody == bodyA) ? bodyB : bodyA;
 
-    if (ballInvolved && gameData.currentState == STATE_PLAYING)
+    if (!ballBody) {
+        return;
+    }
+
+    CollisionType type = IdentifyCollision(bodyA, bodyB);
+
+    if (gameData.currentState == STATE_PLAYING)
     {
         switch (type)
         {
@@ -516,9 +596,22 @@ void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
             break;
         }
 
+        case COLLISION_COMBO_LETTER:
+        {
+            PhysBody* letterBody = otherBody;
+
+            for (auto& starLetter : starLetters) {
+                if (starLetter.body == letterBody && !starLetter.collected) {
+                    starLetter.collected = true;
+                    CollectStarLetter(starLetter.letter);
+                    break;
+                }
+            }
+            break;
+        }
+
         case COLLISION_BLACK_HOLE:
         {
-            LOG("Ball entered black hole sensor! (No penalty)");
             break;
         }
 
@@ -575,9 +668,9 @@ void ModuleGame::RenderMenuState()
         ClearBackground(Color{ 20,30,50,255 });
 
     int screenCenterX = SCREEN_WIDTH / 2;
-    int titleY = SCREEN_HEIGHT * 0.15f;
-    int startTextY = SCREEN_HEIGHT * 0.55f;
-    int highScoreY = SCREEN_HEIGHT * 0.75f;
+    int titleY = (int)(SCREEN_HEIGHT * 0.15f);
+    int startTextY = (int)(SCREEN_HEIGHT * 0.55f);
+    int highScoreY = (int)(SCREEN_HEIGHT * 0.75f);
     int controlsY = SCREEN_HEIGHT - 30;
 
     if (titleTexture.id)
@@ -678,11 +771,12 @@ void ModuleGame::RenderPlayingState()
             20, 180, 18, GREEN);
     }
 
-    DrawText("COMBO:", SCREEN_WIDTH - 250, 20, 20, YELLOW);
-    for (int i = 0; i < 7; ++i)
+    DrawText("COMBO:", SCREEN_WIDTH - 200, 20, 20, YELLOW);
+    const char* star = "STAR";
+    for (int i = 0; i < 4; ++i)
     {
-        Color letterColor = (i < gameData.comboProgress) ? GREEN : DARKGRAY;
-        DrawText(TextFormat("%c", gameData.comboLetters[i]), SCREEN_WIDTH - 180 + i * 25, 20, 25, letterColor);
+        Color letterColor = (i < gameData.comboProgress) ? YELLOW : DARKGRAY;
+        DrawText(TextFormat("%c", star[i]), SCREEN_WIDTH - 130 + i * 25, 20, 25, letterColor);
     }
 
     if (scoreFlashActive && lastScoreIncrease > 0) {
@@ -690,6 +784,39 @@ void ModuleGame::RenderPlayingState()
         if (scoreFlashTimer < 0.25f) {
             DrawText(TextFormat("+%d!", lastScoreIncrease),
                 SCREEN_WIDTH / 2 - 40, 100, 30, flashColor);
+        }
+    }
+
+    for (size_t i = 0; i < starLetters.size(); ++i)
+    {
+        const auto& starLetter = starLetters[i];
+        if (!starLetter.collected && starLetter.body) {
+            int x, y;
+            starLetter.body->GetPosition(x, y);
+
+            if (x >= 0 && x <= SCREEN_WIDTH && y >= 0 && y <= SCREEN_HEIGHT) {
+                Texture2D* texture = nullptr;
+                switch (starLetter.letter) {
+                case 'S': texture = &letterSTexture; break;
+                case 'T': texture = &letterTTexture; break;
+                case 'A': texture = &letterATexture; break;
+                case 'R': texture = &letterRTexture; break;
+                }
+
+                if (texture && texture->id) {
+                    float scale = 0.1f;
+                    int width = (int)(texture->width * scale);
+                    int height = (int)(texture->height * scale);
+                    Rectangle src = { 0,0,(float)texture->width,(float)texture->height };
+                    Rectangle dst = { (float)x, (float)y, (float)width, (float)height };
+                    Vector2 origin = { width / 2.0f, height / 2.0f };
+                    DrawTexturePro(*texture, src, dst, origin, 0.0f, WHITE);
+                }
+                else {
+                    DrawCircle(x, y, 15, ORANGE);
+                    DrawText(TextFormat("%c", starLetter.letter), x - 5, y - 10, 20, WHITE);
+                }
+            }
         }
     }
 
@@ -758,7 +885,7 @@ void ModuleGame::RenderPlayingState()
         {
             int radius = blackHoles[i]->width / 2;
             DrawCircle(x, y, (float)radius, BLACK);
-            DrawCircle(x, y, (float)radius * 0.8f, { 20, 0, 40, 255 });
+            DrawCircle(x, y, (float)radius * 0.8f, Color{ 20, 0, 40, 255 });
         }
     }
 
@@ -883,6 +1010,11 @@ void ModuleGame::RenderPlayingState()
         {
             DrawCircle(x, y, 15, BLUE);
         }
+    }
+
+    if (showDebug) {
+        DrawText(TextFormat("Combo: %d/4", gameData.comboProgress), SCREEN_WIDTH - 200, 50, 16, WHITE);
+        DrawText(TextFormat("Letters: %d", starLetters.size()), SCREEN_WIDTH - 200, 70, 16, WHITE);
     }
 
     DrawText("Press P to Pause", SCREEN_WIDTH - 200, SCREEN_HEIGHT - 60, 16, LIGHTGRAY);
@@ -1071,6 +1203,8 @@ void ModuleGame::LoseBall()
         App->audio->PlayFx(ballLostSfx);
     }
 
+    ResetStarCombo();
+
     gameData.ballsLeft--;
 
     LOG("Balls left: %d", gameData.ballsLeft);
@@ -1107,22 +1241,105 @@ void ModuleGame::LoseBall()
 
 void ModuleGame::AddComboLetter(char letter)
 {
-    if (gameData.comboProgress < 7 &&
+    if (gameData.comboProgress < 4 &&
         letter == gameData.comboLetters[gameData.comboProgress])
     {
         gameData.comboProgress++;
-        App->audio->PlayBonusSound();
+        if (letterCollectSfx >= 0) {
+            App->audio->PlayFx(letterCollectSfx);
+        }
         AddScore(TARGET_COMBO_LETTER, "Combo Letter");
 
-        if (gameData.comboProgress >= 7)
+        if (gameData.comboProgress >= 4)
         {
-            gameData.comboComplete = true;
-            gameData.ballsLeft++;
-            AddScore(TARGET_COMBO_COMPLETE, "Combo Complete");
-            App->audio->PlayComboComplete();
-            gameData.comboProgress = 0;
+            CompleteStarCombo();
         }
     }
+}
+
+void ModuleGame::SpawnStarLetter()
+{
+    if (starLetters.size() >= 2) return;
+
+    std::vector<char> availableLetters;
+    const char allLetters[] = { 'S', 'T', 'A', 'R' };
+
+    for (int i = 0; i < 4; i++) {
+        if (i < gameData.comboProgress) {
+            continue;
+        }
+
+        bool alreadyActive = false;
+        for (const auto& starLetter : starLetters) {
+            if (starLetter.letter == allLetters[i]) {
+                alreadyActive = true;
+                break;
+            }
+        }
+
+        if (!alreadyActive) {
+            availableLetters.push_back(allLetters[i]);
+        }
+    }
+
+    if (availableLetters.empty()) return;
+
+    char letter = availableLetters[GetRandomValue(0, (int)availableLetters.size() - 1)];
+
+    int centerX = SCREEN_WIDTH / 2;
+    int minY = (int)(SCREEN_HEIGHT * 0.3f);
+    int maxY = (int)(SCREEN_HEIGHT * 0.7f);
+
+    int x = GetRandomValue(centerX - 200, centerX + 200);
+    int y = GetRandomValue(minY, maxY);
+
+    PhysBody* letterBody = App->physics->CreateCircle(x, y, 20, b2_staticBody);
+
+    if (letterBody) {
+        b2Fixture* fixture = letterBody->body->GetFixtureList();
+        if (fixture) {
+            fixture->SetSensor(true);
+        }
+
+        letterBody->listener = this;
+
+        StarLetter newLetter;
+        newLetter.body = letterBody;
+        newLetter.letter = letter;
+        newLetter.collected = false;
+        newLetter.spawnTime = 0.0f;
+
+        starLetters.push_back(newLetter);
+    }
+}
+
+void ModuleGame::CollectStarLetter(char letter)
+{
+    AddComboLetter(letter);
+}
+
+void ModuleGame::ResetStarCombo()
+{
+    gameData.comboProgress = 0;
+    gameData.comboComplete = false;
+
+    for (auto& starLetter : starLetters) {
+        if (starLetter.body) {
+            bodiesToDestroy.push_back(starLetter.body);
+        }
+    }
+    starLetters.clear();
+}
+
+void ModuleGame::CompleteStarCombo()
+{
+    gameData.comboComplete = true;
+    gameData.ballsLeft++;
+    AddScore(TARGET_COMBO_COMPLETE, "Combo Complete");
+    if (specialHitSfx >= 0) {
+        App->audio->PlayFx(specialHitSfx);
+    }
+    ResetStarCombo();
 }
 
 void ModuleGame::DrawAudioSettings()

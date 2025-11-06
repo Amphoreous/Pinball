@@ -35,7 +35,7 @@ typedef struct {
     int totalBalls;
     int currentRound;
 
-    char comboLetters[8];
+    char comboLetters[5];
     int comboProgress;
     bool comboComplete;
 

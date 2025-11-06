@@ -310,32 +310,36 @@ bool ModulePhysics::CleanUp()
 PhysBody* ModulePhysics::CreateCircle(int x, int y, int radius, b2BodyType type)
 {
 	PhysBody* pbody = new PhysBody();
-	
+
 	b2BodyDef body;
 	body.type = type;
-	// Convert screen coords to Box2D coords
 	body.position.Set(x * PIXELS_TO_METERS, (SCREEN_HEIGHT - y) * PIXELS_TO_METERS);
-	
-	// Enable CCD (Continuous Collision Detection) to prevent tunneling
-	body.bullet = true;
-	
+
+	if (type == b2_dynamicBody) {
+		body.bullet = true;
+	}
+
 	b2Body* b = world->CreateBody(&body);
-	
+
 	b2CircleShape shape;
 	shape.m_radius = radius * PIXELS_TO_METERS;
-	
+
 	b2FixtureDef fixture;
 	fixture.shape = &shape;
 	fixture.density = 1.0f;
-	fixture.restitution = 0.6f; // Bounciness for pinball
-	fixture.friction = 0.3f;     // Surface friction
-	
+	fixture.restitution = 0.6f;
+	fixture.friction = 0.3f;
+
+	if (type == b2_staticBody) {
+		fixture.isSensor = true;
+	}
+
 	b->CreateFixture(&fixture);
-	
+
 	pbody->body = b;
 	b->GetUserData().pointer = (uintptr_t)pbody;
 	pbody->width = pbody->height = radius * 2;
-	
+
 	return pbody;
 }
 

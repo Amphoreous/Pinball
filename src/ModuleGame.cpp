@@ -23,7 +23,6 @@ ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start
     backgroundTexture = { 0 };
     titleTexture = { 0 };
     ballTexture = { 0 };
-    flipperTexture = { 0 };
     flipperBaseTexture = { 0 };
     bumper1Texture = { 0 };
     bumper2Texture = { 0 };
@@ -96,12 +95,12 @@ bool ModuleGame::Start()
 
     // Load custom TTF font
     font = LoadFontEx("assets/fonts/Planes_ValMore.ttf", 32, 0, 0);
-    if (font.texture.id == 0) 
+    if (font.texture.id == 0)
     {
         LOG("Warning: Failed to load custom font, using default");
         font = GetFontDefault();
     }
-    
+
     titleFont = LoadFontEx("assets/fonts/Planes_ValMore.ttf", 64, 0, 0);
     if (titleFont.texture.id == 0)
     {
@@ -115,8 +114,9 @@ bool ModuleGame::Start()
     ballTexture = LoadTexture("assets/balls/Planet1.png");
     if (ballTexture.id == 0) LOG("Warning: Failed to load ball texture");
 
-    flipperTexture = LoadTexture("assets/flippers/flipper bat.png");
-    if (flipperTexture.id == 0) LOG("Warning: Failed to load flipper texture");
+    // --- ELIMINADO: Carga de flipperTexture ---
+    // flipperTexture = LoadTexture("assets/flippers/flipper bat.png");
+    // if (flipperTexture.id == 0) LOG("Warning: Failed to load flipper texture");
 
     flipperBaseTexture = LoadTexture("assets/flippers/Base Flipper Bat.png");
     if (flipperBaseTexture.id == 0) LOG("Warning: Failed to load flipper base texture");
@@ -136,14 +136,16 @@ bool ModuleGame::Start()
     piece1Texture = LoadTexture("assets/extra/piece1.png");
     if (piece1Texture.id == 0) {
         LOG("Warning: Failed to load piece1 texture");
-    } else {
+    }
+    else {
         LOG("Loaded piece1 texture, ID: %d", piece1Texture.id);
     }
 
     piece2Texture = LoadTexture("assets/extra/piece2.png");
     if (piece2Texture.id == 0) {
         LOG("Warning: Failed to load piece2 texture");
-    } else {
+    }
+    else {
         LOG("Loaded piece2 texture, ID: %d", piece2Texture.id);
     }
 
@@ -199,7 +201,7 @@ bool ModuleGame::Start()
     LOG("Creating bumpers from TMX data...");
     for (const auto& bRect : tmxBumpers)
     {
-        // **CLAVE: Aplicar escalado UNA SOLA VEZ aqu�**
+        // **CLAVE: Aplicar escalado UNA SOLA VEZ aqu**
         float tmx_cx = (bRect.x + (bRect.width / 2.0f)) * scaleX;
         float tmx_cy = (bRect.y + (bRect.height / 2.0f)) * scaleY;
         float tmx_radius = (bRect.width / 2.0f) * scaleX;
@@ -222,16 +224,16 @@ bool ModuleGame::Start()
         }
     }
 
-// Special polygons defined in TMX (triangles etc.)
+    // Special polygons defined in TMX (triangles etc.)
     LOG("Creating special polygons from TMX data...");
     for (const auto& poly : tmxSpecialPolygons)
     {
-        // **CLAVE: Aplicar escalado UNA SOLA VEZ aqu�**
+        // **CLAVE: Aplicar escalado UNA SOLA VEZ aqu**
         int screen_x = (int)roundf(poly.x * scaleX);
         int screen_y = (int)roundf(poly.y * scaleY);
         float rotation_rad = poly.rotation * DEGTORAD;
 
-        // Escalar los puntos tambi�n
+        // Escalar los puntos tambin
         std::vector<int> scaledPoints;
         for (size_t i = 0; i < poly.points.size(); i += 2)
         {
@@ -265,7 +267,7 @@ bool ModuleGame::Start()
     LOG("Creating black holes from TMX data...");
     for (const auto& bhRect : tmxBlackHoles)
     {
-        // **CLAVE: Aplicar escalado UNA SOLA VEZ aqu�**
+        // **CLAVE: Aplicar escalado UNA SOLA VEZ aqu**
         float tmx_cx = (bhRect.x + (bhRect.width / 2.0f)) * scaleX;
         float tmx_cy = (bhRect.y + (bhRect.height / 2.0f)) * scaleY;
         float tmx_radius = (bhRect.width / 2.0f) * scaleX;
@@ -293,7 +295,7 @@ bool ModuleGame::Start()
     for (const auto& basePair : tmxFlipperBases)
     {
         const Rectangle& rect = basePair.first;
-        
+
         float tmx_cx = rect.x + (rect.width / 2.0f);
         float tmx_cy = rect.y + (rect.height / 2.0f);
 
@@ -301,7 +303,7 @@ bool ModuleGame::Start()
         int screen_y = (int)roundf(tmx_cy * scaleY);
         int screen_radius = (int)roundf((rect.width / 2.0f) * scaleX);
 
-        LOG("Creating flipper base at TMX(%.0f, %.0f) -> Screen(%d, %d)", 
+        LOG("Creating flipper base at TMX(%.0f, %.0f) -> Screen(%d, %d)",
             tmx_cx, tmx_cy, screen_x, screen_y);
 
         PhysBody* base = App->physics->CreateCircle(screen_x, screen_y, screen_radius, b2_staticBody);
@@ -312,44 +314,55 @@ bool ModuleGame::Start()
         }
     }
 
-    LOG("Creating flippers (FB) from TMX data...");
-    if (tmxFlippers.size() >= 2)
+    // =================================================================
+    // INICIO DE LA SECCIÓN CORREGIDA (Hardcoded - TAMAÑO CAMBIADO)
+    // =================================================================
+    LOG("Creating hardcoded flippers based on BF1 (base) positions...");
+    if (tmxFlipperBases.size() >= 2)
     {
-        // Sort by X position to identify left and right flippers
-        auto flippers = tmxFlippers;
-        std::sort(flippers.begin(), flippers.end(), 
+        // Ordenar las bases por posición X para identificar izquierda y derecha
+        auto bases = tmxFlipperBases;
+        std::sort(bases.begin(), bases.end(),
             [](const std::pair<Rectangle, float>& a, const std::pair<Rectangle, float>& b) {
                 return a.first.x < b.first.x;
             });
 
-        // Left flipper (first/leftmost) - rotation should be 220° (pointing up-left at rest)
-        const Rectangle& leftRect = flippers[0].first;
-        float left_rotation = flippers[0].second;
-        float tmx_left_x = leftRect.x;
-        float tmx_left_y = leftRect.y;
-        int screen_left_x = (int)roundf(tmx_left_x * scaleX);
-        int screen_left_y = (int)roundf(tmx_left_y * scaleY);
+        // 1. OBTENER COORDENADAS DEL CENTRO DE LAS BASES (BF1)
 
-        // Right flipper (second/rightmost) - rotation should be -220° (mirror, pointing up-right at rest)
-        const Rectangle& rightRect = flippers[1].first;
-        float right_rotation = flippers[1].second;
-        float tmx_right_x = rightRect.x;
-        float tmx_right_y = rightRect.y;
-        int screen_right_x = (int)roundf(tmx_right_x * scaleX);
-        int screen_right_y = (int)roundf(tmx_right_y * scaleY);
+        // Base Izquierda (primera/más a la izquierda)
+        const Rectangle& leftBaseRect = bases[0].first;
+        float tmx_left_base_cx = leftBaseRect.x + (leftBaseRect.width / 2.0f);
+        float tmx_left_base_cy = leftBaseRect.y + (leftBaseRect.height / 2.0f);
+        int screen_left_x = (int)roundf(tmx_left_base_cx * scaleX);
+        int screen_left_y = (int)roundf(tmx_left_base_cy * scaleY);
 
-        LOG("Creating LEFT flipper at Screen(%d, %d) TMX rotation %.1f", screen_left_x, screen_left_y, left_rotation);
-        LOG("Creating RIGHT flipper at Screen(%d, %d) TMX rotation %.1f", screen_right_x, screen_right_y, right_rotation);
+        // Base Derecha (segunda/más a la derecha)
+        const Rectangle& rightBaseRect = bases[1].first;
+        float tmx_right_base_cx = rightBaseRect.x + (rightBaseRect.width / 2.0f);
+        float tmx_right_base_cy = rightBaseRect.y + (rightBaseRect.height / 2.0f);
+        int screen_right_x = (int)roundf(tmx_right_base_cx * scaleX);
+        int screen_right_y = (int)roundf(tmx_right_base_cy * scaleY);
 
-        leftFlipperJoint = App->physics->CreateFlipper(screen_left_x, screen_left_y, 80, 20, true, &leftFlipper);
-        rightFlipperJoint = App->physics->CreateFlipper(screen_right_x, screen_right_y, 80, 20, false, &rightFlipper);
-        
+        LOG("Creating LEFT flipper at BF1 center: Screen(%d, %d)",
+            screen_left_x, screen_left_y);
+        LOG("Creating RIGHT flipper at BF1 center: Screen(%d, %d)",
+            screen_right_x, screen_right_y);
+
+        // 2. CREAR FLIPPERS USANDO LAS COORDENADAS DEL CENTRO DE LAS BASES
+        // --- NUEVAS DIMENSIONES (MÁS PEQUEÑAS) ---
+        const int flipper_width = 55;
+        const int flipper_height = 12;
+
+        leftFlipperJoint = App->physics->CreateFlipper(screen_left_x, screen_left_y, flipper_width, flipper_height, true, &leftFlipper);
+        rightFlipperJoint = App->physics->CreateFlipper(screen_right_x, screen_right_y, flipper_width, flipper_height, false, &rightFlipper);
+
         if (leftFlipper) leftFlipper->listener = this;
         if (rightFlipper) rightFlipper->listener = this;
     }
     else
     {
-        LOG("Warning: Not enough flipper objects in TMX! Found %d, need 2", (int)tmxFlippers.size());
+        LOG("Warning: Cannot create flippers! Need 2 'BF' objects in TMX, found %d.",
+            (int)tmxFlipperBases.size());
     }
 
     InitGameData(&gameData);
@@ -387,7 +400,8 @@ bool ModuleGame::CleanUp()
 
     if (backgroundTexture.id) UnloadTexture(backgroundTexture);
     if (ballTexture.id) UnloadTexture(ballTexture);
-    if (flipperTexture.id) UnloadTexture(flipperTexture);
+    // --- ELIMINADO: Descarga de flipperTexture ---
+    // if (flipperTexture.id) UnloadTexture(flipperTexture);
     if (flipperBaseTexture.id) UnloadTexture(flipperBaseTexture);
     if (bumper1Texture.id) UnloadTexture(bumper1Texture);
     if (bumper2Texture.id) UnloadTexture(bumper2Texture);
@@ -403,7 +417,7 @@ bool ModuleGame::CleanUp()
     if (letterATexture.id) UnloadTexture(letterATexture);
     if (letterRTexture.id) UnloadTexture(letterRTexture);
     if (titleTexture.id) UnloadTexture(titleTexture);
-    
+
     // Unload custom fonts
     if (font.texture.id && font.texture.id != GetFontDefault().texture.id) UnloadFont(font);
     if (titleFont.texture.id && titleFont.texture.id != GetFontDefault().texture.id) UnloadFont(titleFont);
@@ -440,7 +454,7 @@ bool ModuleGame::CleanUp()
     tmxSpecialPolygons.clear();
     tmxExtraPiecesWithType.clear();
     tmxFlipperBases.clear();
-    tmxFlippers.clear();
+    // tmxFlippers ya fue eliminado
 
     return true;
 }
@@ -1135,7 +1149,7 @@ void ModuleGame::RenderPlayingState()
     static bool logged = false;
     if (!logged)
     {
-        LOG("Rendering special polygons: specialPolygons.size()=%zu, tmxSpecialPolygons.size()=%zu, tmxExtraPiecesWithType.size()=%zu", 
+        LOG("Rendering special polygons: specialPolygons.size()=%zu, tmxSpecialPolygons.size()=%zu, tmxExtraPiecesWithType.size()=%zu",
             specialPolygons.size(), tmxSpecialPolygons.size(), tmxExtraPiecesWithType.size());
         logged = true;
     }
@@ -1148,37 +1162,37 @@ void ModuleGame::RenderPlayingState()
 
         const TmxPolygon& tmxPoly = tmxSpecialPolygons[i];
         int type = tmxExtraPiecesWithType[i].second;
-        
+
         // e1 → piece1.png, e2 → piece2.png
         Texture2D* pieceTexture = (type == 1) ? &piece1Texture : &piece2Texture;
-        
+
         if (pieceTexture && pieceTexture->id)
         {
             // Use the TMX bounding rectangle to get correct dimensions
             const Rectangle& tmxRect = tmxExtraPiecesWithType[i].first;
-            
+
             // Calculate scaled dimensions from TMX
             float width = tmxRect.width * scaleX;
             float height = tmxRect.height * scaleY;
-            
+
             Rectangle src = { 0, 0, (float)pieceTexture->width, (float)pieceTexture->height };
-            
+
             // For e2, flip horizontally if on right side
             if (type == 2 && x > SCREEN_WIDTH / 2)
             {
                 src.width = -src.width;
             }
-            
+
             Rectangle dst = { (float)x, (float)y, width, height };
             Vector2 origin = { width / 2.0f, height / 2.0f };
-            
+
             // Get rotation from physics body
             float rotation = 0.0f;
             if (specialPolygons[i]->body)
             {
                 rotation = specialPolygons[i]->body->GetAngle() * RADTODEG;
             }
-            
+
             DrawTexturePro(*pieceTexture, src, dst, origin, rotation, WHITE);
         }
         else
@@ -1190,7 +1204,7 @@ void ModuleGame::RenderPlayingState()
                 LOG("Using fallback rendering for piece %zu: pieceTexture=%p, id=%d", i, pieceTexture, pieceTexture ? pieceTexture->id : 0);
                 logCount++;
             }
-            
+
             float angle_rad = specialPolygons[i]->body ? specialPolygons[i]->body->GetAngle() : 0.0f;
             Vector2 center = { (float)x, (float)y };
 
@@ -1237,47 +1251,62 @@ void ModuleGame::RenderPlayingState()
         }
     }
 
-    // Render left flipper
-    if (leftFlipper && leftFlipper->body)
-    {
-        int x, y;
-        leftFlipper->GetPosition(x, y);
-        float angle = leftFlipper->body->GetAngle() * RADTODEG;
-
-        if (flipperTexture.id)
+    // =================================================================
+    // INICIO DE LA SECCIÓN CORREGIDA (Dibujar como polígono relleno)
+    // =================================================================
+    // Esta función auxiliar transforma los vértices de la hitbox y los dibuja.
+    auto draw_flipper_hitbox = [](PhysBody* flipperBody)
         {
-            float s = 80.0f / (float)flipperTexture.width;
-            int w = (int)(flipperTexture.width * s);
-            int h = (int)(flipperTexture.height * s);
-            Rectangle src = { 0,0,(float)flipperTexture.width,(float)flipperTexture.height };
-            Rectangle dst = { (float)x, (float)y, (float)w, (float)h };
-            // Flipper texture is at 45° to top-right in the PNG. We need to add 45° offset.
-            // The pivot is on the left side for left flipper (15% from left edge)
-            Vector2 origin = { w * 0.15f, h / 2.0f };
-            DrawTexturePro(flipperTexture, src, dst, origin, angle + 45.0f, WHITE);
-        }
-    }
+            if (!flipperBody || !flipperBody->body) return;
+
+            b2Body* body = flipperBody->body;
+            b2Fixture* fixture = body->GetFixtureList();
+
+            // Recorrer todas las fixtures (aunque solo debería haber una)
+            for (; fixture; fixture = fixture->GetNext())
+            {
+                if (fixture->GetType() != b2Shape::e_polygon) continue;
+
+                b2PolygonShape* shape = (b2PolygonShape*)fixture->GetShape();
+                int vertexCount = shape->m_count; // Debería ser 4 para nuestra caja
+
+                if (vertexCount < 3) continue;
+
+                // Obtener los vértices de la hitbox en coordenadas del mundo (Box2D)
+                // Y convertirlos a coordenadas de pantalla (Raylib)
+                Vector2 screenVertices[b2_maxPolygonVertices];
+                int validVertices = 0;
+
+                for (int i = 0; i < vertexCount; ++i)
+                {
+                    // 1. Obtener vértice local
+                    b2Vec2 localPos = shape->m_vertices[i];
+                    // 2. Convertir a posición mundial
+                    b2Vec2 worldPos = body->GetWorldPoint(localPos);
+
+                    // 3. Convertir a píxeles de pantalla (Y-invertida)
+                    screenVertices[i].x = METERS_TO_PIXELS * worldPos.x;
+                    screenVertices[i].y = SCREEN_HEIGHT - (METERS_TO_PIXELS * worldPos.y);
+                    validVertices++;
+                }
+
+                if (validVertices == 4)
+                {
+                    // Dibujar el polígono relleno como dos triángulos (T1: 0,1,2 / T2: 0,2,3)
+                    DrawTriangle(screenVertices[0], screenVertices[1], screenVertices[2], WHITE);
+                    DrawTriangle(screenVertices[0], screenVertices[2], screenVertices[3], WHITE);
+                }
+            }
+        };
+
+    // Render left flipper
+    draw_flipper_hitbox(leftFlipper);
 
     // Render right flipper
-    if (rightFlipper && rightFlipper->body)
-    {
-        int x, y;
-        rightFlipper->GetPosition(x, y);
-        float angle = rightFlipper->body->GetAngle() * RADTODEG;
-
-        if (flipperTexture.id)
-        {
-            float s = 80.0f / (float)flipperTexture.width;
-            int w = (int)(flipperTexture.width * s);
-            int h = (int)(flipperTexture.height * s);
-            // Flip the source rectangle horizontally for right flipper
-            Rectangle src = { (float)flipperTexture.width, 0, -(float)flipperTexture.width, (float)flipperTexture.height };
-            Rectangle dst = { (float)x, (float)y, (float)w, (float)h };
-            // For right flipper, pivot is on the right side (85% from left edge = 15% from right)
-            Vector2 origin = { w * 0.85f, h / 2.0f };
-            DrawTexturePro(flipperTexture, src, dst, origin, angle - 45.0f, WHITE);
-        }
-    }
+    draw_flipper_hitbox(rightFlipper);
+    // =================================================================
+    // FIN DE LA SECCIÓN CORREGIDA
+    // =================================================================
 
     // Render ball
     if (ball && ball->body)
@@ -1741,7 +1770,7 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
     tmxSpecialPolygons.clear();
     tmxExtraPiecesWithType.clear();
     tmxFlipperBases.clear();
-    tmxFlippers.clear();
+    // tmxFlippers.clear(); // <-- ELIMINADO
 
     char* filePtr = fileContent;
     int objectsFound = 0;
@@ -1814,11 +1843,19 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
             {
                 // e1 = piece1.png (triangular extra piece)
                 char* polygonMarker = strstr(filePtr, "<polygon points=\"");
-                if (polygonMarker && polygonMarker < objectEnd && attributesFound)
+
+                // **FIX:** Manually check, do NOT rely on 'attributesFound'
+                char* xStr_e1 = strstr(filePtr, "x=\"");
+                char* yStr_e1 = strstr(filePtr, "y=\"");
+
+                if (polygonMarker && polygonMarker < objectEnd && xStr_e1 && xStr_e1 < objectEnd && yStr_e1 && yStr_e1 < objectEnd)
                 {
-                    Rectangle rect = { x, y, w, h };
+                    float x_e1 = (float)atof(xStr_e1 + 3);
+                    float y_e1 = (float)atof(yStr_e1 + 3);
+
+                    Rectangle rect = { x_e1, y_e1, 0, 0 }; // W/H are not needed here
                     tmxExtraPiecesWithType.push_back({ rect, 1 });
-                    LOG("TMX parse: Found e1 (piece1) at (%.0f, %.0f)", x, y);
+                    LOG("TMX parse: Found e1 (piece1) at (%.0f, %.0f)", x_e1, y_e1);
                     objectsFound++;
                 }
             }
@@ -1826,8 +1863,16 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
             {
                 // e2 = piece2.png (triangular extra piece)
                 char* polygonMarker = strstr(filePtr, "<polygon points=\"");
-                if (polygonMarker && polygonMarker < objectEnd && attributesFound)
+
+                // **FIX:** Manually check, do NOT rely on 'attributesFound'
+                char* xStr_e2 = strstr(filePtr, "x=\"");
+                char* yStr_e2 = strstr(filePtr, "y=\"");
+
+                if (polygonMarker && polygonMarker < objectEnd && xStr_e2 && xStr_e2 < objectEnd && yStr_e2 && yStr_e2 < objectEnd)
                 {
+                    float x_e2 = (float)atof(xStr_e2 + 3);
+                    float y_e2 = (float)atof(yStr_e2 + 3);
+
                     // Get rotation attribute
                     float rotation = 0.0f;
                     char* rotStr = strstr(filePtr, "rotation=\"");
@@ -1835,17 +1880,17 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
                     {
                         rotation = (float)atof(rotStr + 10);
                     }
-                    
-                    Rectangle rect = { x, y, w, h };
+
+                    Rectangle rect = { x_e2, y_e2, 0, 0 }; // W/H are not needed here
                     tmxExtraPiecesWithType.push_back({ rect, 2 });
-                    LOG("TMX parse: Found e2 (piece2) at (%.0f, %.0f) rotation %.1f", x, y, rotation);
+                    LOG("TMX parse: Found e2 (piece2) at (%.0f, %.0f) rotation %.1f", x_e2, y_e2, rotation);
                     objectsFound++;
                 }
             }
             else if (strncmp(nameTag + 6, "BF", 2) == 0)
             {
                 // BF/BF1 = flipper base (Base Flipper Bat.png)
-                if (attributesFound)
+                if (attributesFound) // <-- This is correct, ellipses (BF) DO have w/h
                 {
                     float rotation = 0.0f;
                     char* rotStr = strstr(filePtr, "rotation=\"");
@@ -1853,32 +1898,17 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
                     {
                         rotation = (float)atof(rotStr + 10);
                     }
-                    
+
                     Rectangle rect = { x, y, w, h };
                     tmxFlipperBases.push_back({ rect, rotation });
                     LOG("TMX parse: Found flipper base at (%.0f, %.0f)", x, y);
                     objectsFound++;
                 }
             }
-            else if (strncmp(nameTag + 6, "FB", 2) == 0)
-            {
-                // FB = flipper (flipper bat.png) - these are the actual flippers
-                char* polygonMarker = strstr(filePtr, "<polygon points=\"");
-                if (polygonMarker && polygonMarker < objectEnd && attributesFound)
-                {
-                    float rotation = 0.0f;
-                    char* rotStr = strstr(filePtr, "rotation=\"");
-                    if (rotStr && rotStr < objectEnd)
-                    {
-                        rotation = (float)atof(rotStr + 10);
-                    }
-                    
-                    Rectangle rect = { x, y, w, h };
-                    tmxFlippers.push_back({ rect, rotation });
-                    LOG("TMX parse: Found flipper at (%.0f, %.0f) rotation %.1f", x, y, rotation);
-                    objectsFound++;
-                }
-            }
+            // =================================================================
+            // EL BLOQUE "else if (strncmp(nameTag + 6, "FB", 2) == 0)"
+            // HA SIDO ELIMINADO COMPLETAMENTE
+            // =================================================================
         }
 
         const char* polylineMarker = "<polyline points=\"";

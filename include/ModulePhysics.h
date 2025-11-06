@@ -26,7 +26,7 @@ public:
 	PhysBody* CreateRectangle(int x, int y, int width, int height, b2BodyType type);
 	PhysBody* CreateRectangleSensor(int x, int y, int width, int height);
 	PhysBody* CreateChain(int x, int y, int* points, int point_count, b2BodyType type);
-	PhysBody* CreatePolygonLoop(int x, int y, int* points, int point_count, b2BodyType type, float angle_rad = 0.0f);
+	PhysBody* CreatePolygonLoop(int x, int y, int* points, int point_count, b2BodyType type, float angle_rad, float restitution = 0.5f);
 
 
 	b2RevoluteJoint* CreateFlipper(int x, int y, int width, int height, bool isLeft, PhysBody** flipperBody);

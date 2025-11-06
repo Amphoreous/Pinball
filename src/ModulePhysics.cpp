@@ -484,7 +484,7 @@ PhysBody* ModulePhysics::CreateChain(int x, int y, int* points, int point_count,
 	return pbody;
 }
 
-PhysBody* ModulePhysics::CreatePolygonLoop(int x, int y, int* points, int point_count, b2BodyType type, float angle_rad)
+PhysBody* ModulePhysics::CreatePolygonLoop(int x, int y, int* points, int point_count, b2BodyType type, float angle_rad, float restitution)
 {
 	if (!world)
 	{
@@ -492,7 +492,7 @@ PhysBody* ModulePhysics::CreatePolygonLoop(int x, int y, int* points, int point_
 		return nullptr;
 	}
 
-	if (!points || point_count < 6) // M�nimo 3 puntos (6 valores)
+	if (!points || point_count < 6)
 	{
 		LOG("ERROR: Invalid points or point_count in CreatePolygonLoop: %d", point_count);
 		return nullptr;
@@ -508,9 +508,8 @@ PhysBody* ModulePhysics::CreatePolygonLoop(int x, int y, int* points, int point_
 	b2BodyDef body;
 	body.type = type;
 
-	// **CLAVE: Invertir Y para que coincida con el sistema de Box2D**
 	float posX = PIXELS_TO_METERS * x;
-	float posY = PIXELS_TO_METERS * (SCREEN_HEIGHT - y); // Inversi�n de Y
+	float posY = PIXELS_TO_METERS * (SCREEN_HEIGHT - y);
 
 	if (!b2Vec2(posX, posY).IsValid())
 	{
@@ -519,7 +518,7 @@ PhysBody* ModulePhysics::CreatePolygonLoop(int x, int y, int* points, int point_
 	}
 
 	body.position.Set(posX, posY);
-	body.angle = -angle_rad; // **CLAVE: Invertir �ngulo tambi�n**
+	body.angle = -angle_rad;
 
 	b2Body* b = world->CreateBody(&body);
 	if (!b)
@@ -530,11 +529,10 @@ PhysBody* ModulePhysics::CreatePolygonLoop(int x, int y, int* points, int point_
 
 	b2Vec2* p = new b2Vec2[num_points];
 
-	// Convertir puntos a metros, invirtiendo Y para cada punto
 	for (uint i = 0; i < num_points; ++i)
 	{
 		float px = PIXELS_TO_METERS * points[i * 2 + 0];
-		float py = PIXELS_TO_METERS * -points[i * 2 + 1]; // **CLAVE: Invertir Y de los puntos**
+		float py = PIXELS_TO_METERS * -points[i * 2 + 1];
 
 		if (!b2Vec2(px, py).IsValid())
 		{
@@ -549,7 +547,7 @@ PhysBody* ModulePhysics::CreatePolygonLoop(int x, int y, int* points, int point_
 
 	std::vector<b2Vec2> filteredVertices = FilterCloseVertices(p, num_points);
 
-	delete[] p; // Liberar el array original
+	delete[] p;
 
 	if (filteredVertices.size() < 3)
 	{
@@ -564,7 +562,7 @@ PhysBody* ModulePhysics::CreatePolygonLoop(int x, int y, int* points, int point_
 	b2FixtureDef fixture;
 	fixture.shape = &chain;
 	fixture.density = 1.0f;
-	fixture.restitution = 0.5f;
+	fixture.restitution = restitution;
 	fixture.friction = 0.3f;
 
 	b2Fixture* f = b->CreateFixture(&fixture);

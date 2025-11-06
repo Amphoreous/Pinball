@@ -208,7 +208,7 @@ bool ModuleGame::Start()
         if (b)
         {
             if (b->body && b->body->GetFixtureList())
-                b->body->GetFixtureList()->SetRestitution(1.5f);
+                b->body->GetFixtureList()->SetRestitution(0.8f);
             b->listener = this;
             bumpers.push_back(b);
         }
@@ -241,7 +241,7 @@ bool ModuleGame::Start()
         if (p)
         {
             if (p->body && p->body->GetFixtureList())
-                p->body->GetFixtureList()->SetRestitution(1.5f);
+                p->body->GetFixtureList()->SetRestitution(0.5f);
             p->listener = this;
             specialPolygons.push_back(p);
         }
@@ -283,7 +283,7 @@ bool ModuleGame::Start()
     {
         const Rectangle& rect = piecePair.first;
         int type = piecePair.second;
-        
+
         float tmx_cx = rect.x + (rect.width / 2.0f);
         float tmx_cy = rect.y + (rect.height / 2.0f);
         float tmx_w = rect.width;
@@ -294,21 +294,23 @@ bool ModuleGame::Start()
         int screen_w = (int)roundf(tmx_w * scaleX);
         int screen_h = (int)roundf(tmx_h * scaleY);
 
-        LOG("Creating extra piece type %d at TMX(%.0f, %.0f) -> Screen(%d, %d)", 
+        LOG("Creating extra piece type %d at TMX(%.0f, %.0f) -> Screen(%d, %d)",
             type, tmx_cx, tmx_cy, screen_x, screen_y);
 
-        // Create as static triangular obstacle
         PhysBody* piece = App->physics->CreateRectangle(screen_x, screen_y, screen_w, screen_h, b2_staticBody);
         if (piece)
         {
             if (piece->body && piece->body->GetFixtureList())
             {
-                piece->body->GetFixtureList()->SetRestitution(0.7f);
+                // type == 2 es e2, type == 1 es e1
+                float restitution = (type == 2) ? 0.01f : 0.7f;
+                piece->body->GetFixtureList()->SetRestitution(restitution);
             }
             piece->listener = this;
             extraPieces.push_back(piece);
         }
     }
+
 
     LOG("Creating flipper bases (BF) from TMX data...");
     for (const auto& basePair : tmxFlipperBases)
@@ -1476,7 +1478,7 @@ void ModuleGame::LaunchBall()
 
     LOG("Launching ball with force: %.2f", kickerForce);
 
-    b2Vec2 impulse(0.0f, -kickerForce);
+    b2Vec2 impulse(0.0f, -kickerForce * 0.5f);
     ball->body->ApplyLinearImpulseToCenter(impulse, true);
 
     ballLaunched = true;

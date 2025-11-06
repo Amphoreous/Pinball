@@ -31,6 +31,15 @@ struct StarLetter {
     float spawnTime;
 };
 
+struct MovingTarget {
+    PhysBody* body;
+    float initialY;
+    float minY;
+    float maxY;
+    float speed;
+    bool movingDown;
+};
+
 class ModuleGame : public Module
 {
 public:
@@ -85,6 +94,7 @@ public:
     void ResumeGame();
 
     void ApplyBlackHoleForces(float dt);
+    void UpdateMovingTargets(float dt);
 
 public:
     GameData gameData = {};
@@ -99,7 +109,7 @@ public:
     b2RevoluteJoint* rightFlipperJoint = nullptr;
 
     std::vector<PhysBody*> bumpers;
-    std::vector<PhysBody*> targets;
+    std::vector<MovingTarget> targets;
     std::vector<PhysBody*> specialTargets;
     std::vector<PhysBody*> blackHoles;
     std::vector<StarLetter> starLetters;
@@ -122,6 +132,7 @@ public:
     Texture2D letterATexture = { 0 };
     Texture2D letterRTexture = { 0 };
     Texture2D spaceshipTexture = { 0 };
+    Texture2D movingTargetTexture = { 0 };
 
     Texture2D titleTexture = { 0 };
 

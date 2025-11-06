@@ -37,6 +37,7 @@ ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start
     letterATexture = { 0 };
     letterRTexture = { 0 };
     spaceshipTexture = { 0 };
+    movingTargetTexture = { 0 };
 
     font = { 0 };
     titleFont = { 0 };
@@ -132,6 +133,9 @@ bool ModuleGame::Start()
     spaceshipTexture = LoadTexture("assets/special_objects/spaceship.png");
     if (spaceshipTexture.id == 0) LOG("Warning: Failed to load spaceship texture");
 
+    movingTargetTexture = LoadTexture("assets/special_objects/target.png");
+    if (movingTargetTexture.id == 0) LOG("Warning: Failed to load moving target texture");
+
     letterSTexture = LoadTexture("assets/letters/S.png");
     letterTTexture = LoadTexture("assets/letters/T.png");
     letterATexture = LoadTexture("assets/letters/A.png");
@@ -196,15 +200,29 @@ bool ModuleGame::Start()
 
     int targetY = 200;
     int centerX = SCREEN_WIDTH / 2;
-    PhysBody* t1 = App->physics->CreateRectangle(centerX - 120, targetY, 40, 20, b2_staticBody);
-    if (t1) {
-        t1->listener = this;
-        targets.push_back(t1);
+
+    MovingTarget mt1;
+    mt1.body = App->physics->CreateRectangle(centerX - 120, targetY, 40, 20, b2_kinematicBody);
+    mt1.initialY = targetY;
+    mt1.minY = 700;
+    mt1.maxY = targetY;
+    mt1.speed = 35.0f;
+    mt1.movingDown = true;
+    if (mt1.body) {
+        mt1.body->listener = this;
+        targets.push_back(mt1);
     }
-    PhysBody* t2 = App->physics->CreateRectangle(centerX + 120, targetY, 40, 20, b2_staticBody);
-    if (t2) {
-        t2->listener = this;
-        targets.push_back(t2);
+
+    MovingTarget mt2;
+    mt2.body = App->physics->CreateRectangle(centerX + 120, targetY, 40, 20, b2_kinematicBody);
+    mt2.initialY = targetY;
+    mt2.minY = 700;
+    mt2.maxY = targetY;
+    mt2.speed = 35.0f;
+    mt2.movingDown = false;
+    if (mt2.body) {
+        mt2.body->listener = this;
+        targets.push_back(mt2);
     }
 
     PhysBody* st1 = App->physics->CreateRectangle(centerX, 500, 50, 30, b2_staticBody);
@@ -291,6 +309,7 @@ bool ModuleGame::CleanUp()
     if (targetTexture.id) UnloadTexture(targetTexture);
     if (specialTargetTexture.id) UnloadTexture(specialTargetTexture);
     if (spaceshipTexture.id) UnloadTexture(spaceshipTexture);
+    if (movingTargetTexture.id) UnloadTexture(movingTargetTexture);
     if (letterSTexture.id) UnloadTexture(letterSTexture);
     if (letterTTexture.id) UnloadTexture(letterTTexture);
     if (letterATexture.id) UnloadTexture(letterATexture);
@@ -312,8 +331,14 @@ bool ModuleGame::CleanUp()
     }
     bodiesToDestroy.clear();
 
-    bumpers.clear();
+    for (auto& target : targets) {
+        if (target.body && target.body->body) {
+            App->physics->GetWorld()->DestroyBody(target.body->body);
+        }
+    }
     targets.clear();
+
+    bumpers.clear();
     specialTargets.clear();
     blackHoles.clear();
     mapCollisionPoints.clear();
@@ -568,7 +593,7 @@ CollisionType ModuleGame::IdentifyCollision(PhysBody* bodyA, PhysBody* bodyB)
 
     for (size_t i = 0; i < targets.size(); ++i)
     {
-        if (targets[i] && (bodyA == targets[i] || bodyB == targets[i]))
+        if (targets[i].body && (bodyA == targets[i].body || bodyB == targets[i].body))
             return COLLISION_TARGET;
     }
 
@@ -767,6 +792,7 @@ void ModuleGame::RenderMenuState()
 void ModuleGame::UpdatePlayingState()
 {
     ApplyBlackHoleForces(GetFrameTime());
+    UpdateMovingTargets(GetFrameTime());
 
     if (IsKeyPressed(KEY_P))
     {
@@ -984,10 +1010,20 @@ void ModuleGame::RenderPlayingState()
     for (size_t i = 0; i < targets.size(); ++i)
     {
         int x = 0, y = 0;
-        if (!targets[i]) continue;
-        targets[i]->GetPosition(x, y);
+        if (!targets[i].body) continue;
+        targets[i].body->GetPosition(x, y);
 
-        if (targetTexture.id)
+        if (movingTargetTexture.id)
+        {
+            float scale = 0.08f;
+            int width = (int)(movingTargetTexture.width * scale);
+            int height = (int)(movingTargetTexture.height * scale);
+            Rectangle src = { 0,0,(float)movingTargetTexture.width,(float)movingTargetTexture.height };
+            Rectangle dst = { (float)x, (float)y, (float)width, (float)height };
+            Vector2 origin = { width / 2.0f, height / 2.0f };
+            DrawTexturePro(movingTargetTexture, src, dst, origin, 0.0f, WHITE);
+        }
+        else if (targetTexture.id)
         {
             float scale = 40.0f / (float)targetTexture.width;
             int width = (int)(targetTexture.width * scale);
@@ -1804,6 +1840,40 @@ void ModuleGame::ApplyBlackHoleForces(float dt)
 
             ball->body->ApplyForceToCenter(forceVec, true);
         }
+    }
+}
+
+void ModuleGame::UpdateMovingTargets(float dt)
+{
+    for (auto& target : targets)
+    {
+        if (!target.body || !target.body->body) continue;
+
+        b2Vec2 currentPos = target.body->body->GetPosition();
+        float currentY = currentPos.y * METERS_TO_PIXELS;
+        currentY = SCREEN_HEIGHT - currentY;
+
+        if (target.movingDown)
+        {
+            currentY += target.speed * dt;
+            if (currentY >= target.minY)
+            {
+                currentY = target.minY;
+                target.movingDown = false;
+            }
+        }
+        else
+        {
+            currentY -= target.speed * dt;
+            if (currentY <= target.maxY)
+            {
+                currentY = target.maxY;
+                target.movingDown = true;
+            }
+        }
+
+        float newYBox2D = (SCREEN_HEIGHT - currentY) * PIXELS_TO_METERS;
+        target.body->body->SetTransform(b2Vec2(currentPos.x, newYBox2D), 0);
     }
 }
 

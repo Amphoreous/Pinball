@@ -584,6 +584,8 @@ void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
 
     if (gameData.currentState == STATE_PLAYING)
     {
+        float impactForce = CalculateImpactForce(ballBody);
+
         switch (type)
         {
         case COLLISION_BALL_LOSS_SENSOR:
@@ -602,7 +604,7 @@ void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
 
                 if (bumperHitSfx >= 0)
                 {
-                    App->audio->PlayFx(bumperHitSfx);
+                    App->audio->PlayBumperHit(impactForce);
                 }
 
                 AddScore(TARGET_BUMPER, "Bumper");
@@ -614,7 +616,7 @@ void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
         {
             if (targetHitSfx >= 0)
             {
-                App->audio->PlayFx(targetHitSfx);
+                App->audio->PlayBonusSound();
             }
             AddScore(100, "Target");
             break;
@@ -624,7 +626,7 @@ void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
         {
             if (specialHitSfx >= 0)
             {
-                App->audio->PlayFx(specialHitSfx);
+                App->audio->PlayBonusSound();
             }
             AddScore(TARGET_SPECIAL, "Special Target");
             break;
@@ -651,12 +653,14 @@ void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
 
         case COLLISION_FLIPPER:
         {
+            App->audio->PlayFlipperHit(impactForce);
             AddScore(TARGET_FLIPPER, "Flipper");
             break;
         }
 
         case COLLISION_WALL:
         {
+            App->audio->PlayBumperHit(impactForce * 0.5f);
             AddScore(TARGET_WALL, "Wall");
             break;
         }

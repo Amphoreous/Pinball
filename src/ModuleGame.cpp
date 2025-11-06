@@ -1175,14 +1175,13 @@ void ModuleGame::RenderPlayingState()
         specialPolygons[i]->GetPosition(x, y);
 
         const TmxPolygon& tmxPoly = tmxSpecialPolygons[i];
-        int type = tmxPoly.type;  // Use the type stored directly in TmxPolygon
+        int type = tmxPoly.type;  // 1 = e1, 2 = e2
 
-        // e1 → piece1.png, e2 → piece2.png
         Texture2D* pieceTexture = (type == 1) ? &piece1Texture : &piece2Texture;
 
         if (pieceTexture && pieceTexture->id)
         {
-            // Calculate bounding box dimensions from polygon points (TMX local coords)
+            // Bounding box in local TMX polygon space
             float minX = FLT_MAX, minY = FLT_MAX, maxX = -FLT_MAX, maxY = -FLT_MAX;
             for (size_t j = 0; j < tmxPoly.points.size(); j += 2)
             {
@@ -1194,75 +1193,44 @@ void ModuleGame::RenderPlayingState()
                 if (py > maxY) maxY = py;
             }
 
-            // Calculate scaled dimensions from TMX
             float width = (maxX - minX) * scaleX;
             float height = (maxY - minY) * scaleY;
 
-            // Default texture center: use physics body position
-            Vector2 center = { (float)x, (float)y };
+            // Correct center relative to polygon origin (object position is its top-left in Tiled)
+            float centerOffsetX = (minX + (maxX - minX) * 0.5f) * scaleX;
+            float centerOffsetY = (minY + (maxY - minY) * 0.5f) * scaleY;
+            Vector2 center = { (float)x + centerOffsetX, (float)y + centerOffsetY };
 
-            // Get rotation from physics body (degrees)
+            // Box2D angle is inverted due to Y flip during body creation; invert for visual
             float rotation = 0.0f;
             if (specialPolygons[i]->body)
             {
-                rotation = specialPolygons[i]->body->GetAngle() * RADTODEG;
+                rotation = -(specialPolygons[i]->body->GetAngle() * RADTODEG);
             }
 
-            // If this is an e2 piece, try to anchor its bottom-right corner to the nearest flipper base
-            if (type == 2 && !flipperBasePositions.empty())
-            {
-                // find nearest base
-                float bestDist = FLT_MAX;
-                Vector2 bestBase = { 0.0f, 0.0f };
-                for (const auto &bp : flipperBasePositions)
-                {
-                    float dx = bp.x - (float)x;
-                    float dy = bp.y - (float)y;
-                    float d2 = dx*dx + dy*dy;
-                    if (d2 < bestDist) { bestDist = d2; bestBase = bp; }
-                }
-
-                // If the nearest base is reasonably close, snap bottom-right to it
-                const float maxSnapDist = 200.0f * 200.0f; // squared threshold (~200px)
-                if (bestDist < maxSnapDist)
-                {
-                    float ang_rad = rotation * DEGTORAD;
-                    // vector from center to bottom-right corner in local (unrotated) coords
-                    Vector2 localBR = { width * 0.5f, height * 0.5f };
-                    // rotate localBR by rotation
-                    Vector2 rotatedBR = { localBR.x * cosf(ang_rad) - localBR.y * sinf(ang_rad),
-                                           localBR.x * sinf(ang_rad) + localBR.y * cosf(ang_rad) };
-                    // center = base - rotatedBR so that bottom-right corner lands on base
-                    center.x = bestBase.x - rotatedBR.x;
-                    center.y = bestBase.y - rotatedBR.y;
-                }
-            }
-
+            // Optional horizontal flip for e2 to mirror when on right side
             Rectangle src = { 0, 0, (float)pieceTexture->width, (float)pieceTexture->height };
-            if (type == 2)
+            if (type == 2 && center.x > SCREEN_WIDTH * 0.5f)
             {
-                // flip horizontally if needed depending on base side
-                if (center.x > SCREEN_WIDTH / 2) src.width = -src.width;
+                src.width = -src.width;
             }
 
             Rectangle dst = { center.x, center.y, width, height };
-            Vector2 origin = { width / 2.0f, height / 2.0f };
+            Vector2 origin = { width * 0.5f, height * 0.5f };
+
+            // Basic visibility guard + debug log for off-screen cases
+            if (dst.x + dst.width * 0.5f < 0 || dst.x - dst.width * 0.5f > SCREEN_WIDTH ||
+                dst.y + dst.height * 0.5f < 0 || dst.y - dst.height * 0.5f > SCREEN_HEIGHT)
+            {
+                static int offLog = 0; if (offLog < 3) { LOG("Piece type %d computed off-screen center (%.1f, %.1f)", type, center.x, center.y); offLog++; }
+            }
 
             DrawTexturePro(*pieceTexture, src, dst, origin, rotation, WHITE);
         }
         else
         {
-            // Fallback: draw the polygon outline in debug or if texture missing
-            static int logCount = 0;
-            if (logCount < 3)
-            {
-                LOG("Using fallback rendering for piece %zu: pieceTexture=%p, id=%d", i, pieceTexture, pieceTexture ? pieceTexture->id : 0);
-                logCount++;
-            }
-
+            // Fallback polygon outline
             float angle_rad = specialPolygons[i]->body ? specialPolygons[i]->body->GetAngle() : 0.0f;
-            Vector2 center = { (float)x, (float)y };
-
             std::vector<Vector2> screenPoints;
             for (size_t j = 0; j < tmxPoly.points.size(); j += 2)
             {
@@ -1270,15 +1238,11 @@ void ModuleGame::RenderPlayingState()
                 float localY = tmxPoly.points[j + 1] * scaleY;
                 float rotatedX = localX * cosf(angle_rad) - localY * sinf(angle_rad);
                 float rotatedY = localX * sinf(angle_rad) + localY * cosf(angle_rad);
-                screenPoints.push_back(Vector2{ center.x + rotatedX, center.y + rotatedY });
+                screenPoints.push_back(Vector2{ (float)x + rotatedX, (float)y + rotatedY });
             }
-
-            if (screenPoints.size() > 1)
+            for (size_t j = 0; j < screenPoints.size(); ++j)
             {
-                for (size_t j = 0; j < screenPoints.size(); ++j)
-                {
-                    DrawLineV(screenPoints[j], screenPoints[(j + 1) % screenPoints.size()], YELLOW);
-                }
+                DrawLineV(screenPoints[j], screenPoints[(j + 1) % screenPoints.size()], YELLOW);
             }
         }
     }
@@ -1338,7 +1302,8 @@ void ModuleGame::RenderPlayingState()
             // The Box2D flipper body is positioned at the pivot (one end of the flipper).
             // The visual center must be offset from the pivot by half the flipper visual width.
             float localOffsetX = (isLeft ? dstWidth * 0.5f : -dstWidth * 0.5f);
-            float ang_rad = angle; // body angle in radians
+            // Invert angle for visual rotation due to Y-axis flip in physics setup
+            float ang_rad = -angle; // use inverted angle for offset rotation
             // Rotate local offset into world/screen space
             float offsetX = localOffsetX * cosf(ang_rad) - 0.0f * sinf(ang_rad);
             float offsetY = localOffsetX * sinf(ang_rad) + 0.0f * cosf(ang_rad);
@@ -1349,7 +1314,7 @@ void ModuleGame::RenderPlayingState()
 
             Rectangle dst = { centerX, centerY, dstWidth, dstHeight };
             Vector2 origin = { dstWidth / 2.0f, dstHeight / 2.0f };
-            float rotation = angle * RADTODEG;
+            float rotation = -angle * RADTODEG; // invert for correct visual alignment
 
             DrawTexturePro(flipperTexture, src, dst, origin, rotation, WHITE);
         };

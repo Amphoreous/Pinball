@@ -144,6 +144,7 @@ public:
     int specialHitSfx = -1;
     int ballLostSfx = -1;
     int letterCollectSfx = -1;
+    int nextLetterIndex = 0;
 
     std::vector<int> mapCollisionPoints;
     std::vector<Rectangle> tmxBlackHoles;
@@ -164,4 +165,9 @@ public:
     bool ballSavedAwake = false;
 
     bool isGamePaused = false;
+
+    bool comboCompleteEffect = false;
+    float comboCompleteTimer = 0.0f;
+    int comboCompleteFlashCount = 0;
+    Color comboCompleteFlashColor;
 };

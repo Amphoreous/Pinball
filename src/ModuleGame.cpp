@@ -67,6 +67,11 @@ ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start
 
     memset(&gameData, 0, sizeof(GameData));
     strcpy_s(gameData.comboLetters, 5, "STAR");
+
+    comboCompleteEffect = false;
+    comboCompleteTimer = 0.0f;
+    comboCompleteFlashCount = 0;
+    comboCompleteFlashColor = YELLOW;
 }
 
 ModuleGame::~ModuleGame()
@@ -333,6 +338,26 @@ update_status ModuleGame::Update()
         }
     }
 
+    if (comboCompleteEffect) {
+        comboCompleteTimer += dt;
+
+        if (comboCompleteTimer >= 0.1f) {
+            comboCompleteTimer = 0.0f;
+            comboCompleteFlashCount++;
+
+            if (comboCompleteFlashColor.r == YELLOW.r && comboCompleteFlashColor.g == YELLOW.g && comboCompleteFlashColor.b == YELLOW.b) {
+                comboCompleteFlashColor = ORANGE;
+            }
+            else {
+                comboCompleteFlashColor = YELLOW;
+            }
+
+            if (comboCompleteFlashCount >= 50) {
+                comboCompleteEffect = false;
+            }
+        }
+    }
+
     if (gameData.scoreNeedsSaving) {
         SaveHighScore();
         gameData.scoreNeedsSaving = false;
@@ -353,18 +378,27 @@ update_status ModuleGame::Update()
     if (gameData.currentState == STATE_PLAYING)
     {
         starLetterSpawnTimer += dt;
-        if (starLetterSpawnTimer >= STAR_LETTER_SPAWN_INTERVAL)
+
+        if (starLetters.empty() && starLetterSpawnTimer >= STAR_LETTER_SPAWN_INTERVAL)
         {
             SpawnStarLetter();
             starLetterSpawnTimer = 0.0f;
         }
 
         for (auto it = starLetters.begin(); it != starLetters.end(); ) {
-            if (it->collected || it->spawnTime > 8.0f) {
+            if (it->collected) {
                 if (it->body) {
                     bodiesToDestroy.push_back(it->body);
                 }
                 it = starLetters.erase(it);
+            }
+            else if (it->spawnTime > 8.0f) {
+                LOG("Letter %c timed out, will respawn", it->letter);
+                if (it->body) {
+                    bodiesToDestroy.push_back(it->body);
+                }
+                it = starLetters.erase(it);
+                starLetterSpawnTimer = 0.0f;
             }
             else {
                 it->spawnTime += dt;
@@ -743,6 +777,12 @@ void ModuleGame::UpdatePlayingState()
 
 void ModuleGame::RenderPlayingState()
 {
+    if (comboCompleteEffect) {
+        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
+            Color{ comboCompleteFlashColor.r, comboCompleteFlashColor.g,
+                 comboCompleteFlashColor.b, 80 });
+    }
+
     if (backgroundTexture.id)
     {
         Rectangle src = { 0, 0, (float)backgroundTexture.width, (float)backgroundTexture.height };
@@ -771,12 +811,38 @@ void ModuleGame::RenderPlayingState()
             20, 180, 18, GREEN);
     }
 
-    DrawText("COMBO:", SCREEN_WIDTH - 200, 20, 20, YELLOW);
+    if (comboCompleteEffect && comboCompleteFlashCount < 10) {
+        const char* comboText = "COMBO COMPLETE! +5000 POINTS!";
+        int textWidth = MeasureText(comboText, 30);
+
+        DrawRectangle(SCREEN_WIDTH / 2 - textWidth / 2 - 10, 250, textWidth + 20, 50, Color{ 0,0,0,200 });
+        DrawText(comboText, SCREEN_WIDTH / 2 - textWidth / 2, 260, 30, comboCompleteFlashColor);
+
+        for (int i = 0; i < 8; i++) {
+            float angle = comboCompleteTimer * 10.0f + i * (360.0f / 8.0f);
+            int x = SCREEN_WIDTH / 2 + (int)(cosf(angle * DEG2RAD) * 200.0f);
+            int y = 300 + (int)(sinf(angle * DEG2RAD) * 80.0f);
+            DrawCircle(x, y, 10.0f + 5.0f * sinf(comboCompleteTimer * 20.0f + (float)i), comboCompleteFlashColor);
+        }
+    }
+
+    int comboTextX = SCREEN_WIDTH - 220;
+    int starStartX = comboTextX + 100;
+    int starY = 20;
+
+    DrawText("COMBO:", comboTextX, starY, 20, YELLOW);
     const char* star = "STAR";
     for (int i = 0; i < 4; ++i)
     {
         Color letterColor = (i < gameData.comboProgress) ? YELLOW : DARKGRAY;
-        DrawText(TextFormat("%c", star[i]), SCREEN_WIDTH - 130 + i * 25, 20, 25, letterColor);
+
+        if (comboCompleteEffect && i < gameData.comboProgress) {
+            float pulse = sinf(comboCompleteTimer * 20.0f) * 5.0f + 25.0f;
+            DrawText(TextFormat("%c", star[i]), starStartX + i * 25, starY, (int)pulse, comboCompleteFlashColor);
+        }
+        else {
+            DrawText(TextFormat("%c", star[i]), starStartX + i * 25, starY, 25, letterColor);
+        }
     }
 
     if (scoreFlashActive && lastScoreIncrease > 0) {
@@ -1012,11 +1078,6 @@ void ModuleGame::RenderPlayingState()
         }
     }
 
-    if (showDebug) {
-        DrawText(TextFormat("Combo: %d/4", gameData.comboProgress), SCREEN_WIDTH - 200, 50, 16, WHITE);
-        DrawText(TextFormat("Letters: %d", starLetters.size()), SCREEN_WIDTH - 200, 70, 16, WHITE);
-    }
-
     DrawText("Press P to Pause", SCREEN_WIDTH - 200, SCREEN_HEIGHT - 60, 16, LIGHTGRAY);
 }
 
@@ -1194,6 +1255,22 @@ void ModuleGame::RespawnBall()
     LOG("Ball respawned successfully");
 }
 
+void ModuleGame::ResetStarCombo()
+{
+    gameData.comboProgress = 0;
+    gameData.comboComplete = false;
+    nextLetterIndex = 0;
+
+    for (auto& starLetter : starLetters) {
+        if (starLetter.body) {
+            bodiesToDestroy.push_back(starLetter.body);
+        }
+    }
+    starLetters.clear();
+
+    LOG("Star combo reset, next letter index: %d", nextLetterIndex);
+}
+
 void ModuleGame::LoseBall()
 {
     LOG("Processing ball loss");
@@ -1259,32 +1336,20 @@ void ModuleGame::AddComboLetter(char letter)
 
 void ModuleGame::SpawnStarLetter()
 {
-    if (starLetters.size() >= 2) return;
+    if (!starLetters.empty()) return;
 
-    std::vector<char> availableLetters;
-    const char allLetters[] = { 'S', 'T', 'A', 'R' };
-
-    for (int i = 0; i < 4; i++) {
-        if (i < gameData.comboProgress) {
-            continue;
-        }
-
-        bool alreadyActive = false;
-        for (const auto& starLetter : starLetters) {
-            if (starLetter.letter == allLetters[i]) {
-                alreadyActive = true;
-                break;
-            }
-        }
-
-        if (!alreadyActive) {
-            availableLetters.push_back(allLetters[i]);
-        }
+    if (gameData.comboProgress >= 4) {
+        nextLetterIndex = 0;
+        return;
     }
 
-    if (availableLetters.empty()) return;
+    const char letters[] = { 'S', 'T', 'A', 'R' };
 
-    char letter = availableLetters[GetRandomValue(0, (int)availableLetters.size() - 1)];
+    if (nextLetterIndex >= 4) {
+        nextLetterIndex = gameData.comboProgress;
+    }
+
+    char letter = letters[nextLetterIndex];
 
     int centerX = SCREEN_WIDTH / 2;
     int minY = (int)(SCREEN_HEIGHT * 0.3f);
@@ -1310,35 +1375,55 @@ void ModuleGame::SpawnStarLetter()
         newLetter.spawnTime = 0.0f;
 
         starLetters.push_back(newLetter);
+
+        LOG("Spawned letter %c (index %d)", letter, nextLetterIndex);
     }
 }
 
 void ModuleGame::CollectStarLetter(char letter)
 {
-    AddComboLetter(letter);
-}
+    const char* expectedSequence = "STAR";
 
-void ModuleGame::ResetStarCombo()
-{
-    gameData.comboProgress = 0;
-    gameData.comboComplete = false;
+    if (gameData.comboProgress < 4 && letter == expectedSequence[gameData.comboProgress]) {
+        gameData.comboProgress++;
+        nextLetterIndex = gameData.comboProgress;
 
-    for (auto& starLetter : starLetters) {
-        if (starLetter.body) {
-            bodiesToDestroy.push_back(starLetter.body);
+        if (letterCollectSfx >= 0) {
+            App->audio->PlayFx(letterCollectSfx);
+        }
+
+        AddScore(TARGET_COMBO_LETTER, "Combo Letter");
+        LOG("Collected letter %c, progress: %d/4, next index: %d",
+            letter, gameData.comboProgress, nextLetterIndex);
+
+        if (gameData.comboProgress >= 4) {
+            LOG("=== COMBO STAR COMPLETED! ===");
+            CompleteStarCombo();
         }
     }
-    starLetters.clear();
+    else {
+        LOG("Wrong letter sequence. Expected %c but got %c at position %d",
+            expectedSequence[gameData.comboProgress], letter, gameData.comboProgress);
+    }
 }
 
 void ModuleGame::CompleteStarCombo()
 {
     gameData.comboComplete = true;
     gameData.ballsLeft++;
-    AddScore(TARGET_COMBO_COMPLETE, "Combo Complete");
+
+    AddScore(5000, "Combo Complete");
+
     if (specialHitSfx >= 0) {
         App->audio->PlayFx(specialHitSfx);
     }
+
+    comboCompleteEffect = true;
+    comboCompleteTimer = 0.0f;
+    comboCompleteFlashCount = 0;
+    comboCompleteFlashColor = YELLOW;
+
+    LOG("STAR COMBO COMPLETED! 5000 points awarded. Bonus ball awarded. Resetting combo.");
     ResetStarCombo();
 }
 

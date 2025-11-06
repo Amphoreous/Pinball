@@ -438,23 +438,40 @@ PhysBody* ModulePhysics::CreateChain(int x, int y, int* points, int point_count,
 		return nullptr;
 	}
 
-	b2ChainShape chain;
-
-	// Calculamos los v�rtices fantasma prev/next
-	b2Vec2 prevVertex = filteredVertices[0] + (filteredVertices[0] - filteredVertices[1]);
-	b2Vec2 nextVertex = filteredVertices.back() + (filteredVertices.back() - filteredVertices[filteredVertices.size() - 2]);
-
-	// Usar los v�rtices filtrados y los v�rtices fantasma
-	chain.CreateChain(filteredVertices.data(), (int)filteredVertices.size(), prevVertex, nextVertex);
-
-	b2FixtureDef fixture;
-	fixture.shape = &chain;
-	fixture.friction = 0.3f;
-
-	b2Fixture* f = b->CreateFixture(&fixture);
-	if (!f)
+	// Build forward-wound chain (one-sided normal to the right of edge)
+	b2ChainShape chainForward;
 	{
-		LOG("ERROR: Failed to create fixture in CreateChain");
+		b2Vec2 prevVertex = filteredVertices[0] + (filteredVertices[0] - filteredVertices[1]);
+		b2Vec2 nextVertex = filteredVertices.back() + (filteredVertices.back() - filteredVertices[filteredVertices.size() - 2]);
+		chainForward.CreateChain(filteredVertices.data(), (int)filteredVertices.size(), prevVertex, nextVertex);
+	}
+
+	// Build reverse-wound chain to emulate two-sided collisions
+	b2ChainShape chainReverse;
+	{
+		std::vector<b2Vec2> reversed(filteredVertices.rbegin(), filteredVertices.rend());
+		b2Vec2 prevVertex = reversed[0] + (reversed[0] - reversed[1]);
+		b2Vec2 nextVertex = reversed.back() + (reversed.back() - reversed[reversed.size() - 2]);
+		chainReverse.CreateChain(reversed.data(), (int)reversed.size(), prevVertex, nextVertex);
+	}
+
+	// Attach both forward and reverse chain fixtures
+	b2FixtureDef fixtureF;
+	fixtureF.shape = &chainForward;
+	fixtureF.friction = 0.3f;
+	if (!b->CreateFixture(&fixtureF))
+	{
+		LOG("ERROR: Failed to create forward chain fixture in CreateChain");
+		world->DestroyBody(b);
+		return nullptr;
+	}
+
+	b2FixtureDef fixtureR;
+	fixtureR.shape = &chainReverse;
+	fixtureR.friction = 0.3f;
+	if (!b->CreateFixture(&fixtureR))
+	{
+		LOG("ERROR: Failed to create reverse chain fixture in CreateChain");
 		world->DestroyBody(b);
 		return nullptr;
 	}

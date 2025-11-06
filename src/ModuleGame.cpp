@@ -1154,60 +1154,60 @@ void ModuleGame::RenderPlayingState()
         logged = true;
     }
 
-    for (size_t i = 0; i < specialPolygons.size() && i < tmxSpecialPolygons.size() && i < tmxExtraPiecesWithType.size(); ++i)
+    for (size_t i = 0; i < specialPolygons.size() && i < tmxSpecialPolygons.size(); ++i)
     {
-        int x = 0, y = 0;
         if (!specialPolygons[i]) continue;
-        specialPolygons[i]->GetPosition(x, y);
 
         const TmxPolygon& tmxPoly = tmxSpecialPolygons[i];
-        int type = tmxExtraPiecesWithType[i].second;
+        int type = tmxPoly.type; // 1=e1, 2=e2
 
-        // e1 → piece1.png, e2 → piece2.png
-        Texture2D* pieceTexture = (type == 1) ? &piece1Texture : &piece2Texture;
+        Texture2D* pieceTexture = nullptr;
+        if (type == 1) pieceTexture = &piece1Texture;
+        else if (type == 2) pieceTexture = &piece2Texture;
 
-        if (pieceTexture && pieceTexture->id)
+        if (pieceTexture && pieceTexture->id && (type == 1 || type == 2))
         {
-            // Use the TMX bounding rectangle to get correct dimensions
-            const Rectangle& tmxRect = tmxExtraPiecesWithType[i].first;
+            int x = 0, y = 0;
+            specialPolygons[i]->GetPosition(x, y);
 
-            // Calculate scaled dimensions from TMX
-            float width = tmxRect.width * scaleX;
-            float height = tmxRect.height * scaleY;
+            // Determine dimensions
+            float width = 0.0f, height = 0.0f;
+            if (i < tmxExtraPiecesWithType.size())
+            {
+                const Rectangle& r = tmxExtraPiecesWithType[i].first;
+                width = r.width * scaleX;
+                height = r.height * scaleY;
+            }
+            else
+            {
+                float minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
+                for (size_t p = 0; p < tmxPoly.points.size(); p += 2)
+                {
+                    float px = (float)tmxPoly.points[p];
+                    float py = (float)tmxPoly.points[p + 1];
+                    if (px < minX) minX = px; if (px > maxX) maxX = px;
+                    if (py < minY) minY = py; if (py > maxY) maxY = py;
+                }
+                width = (maxX - minX) * scaleX;
+                height = (maxY - minY) * scaleY;
+                if (width <= 0 || height <= 0) { width = 60 * scaleX; height = 60 * scaleY; }
+            }
 
             Rectangle src = { 0, 0, (float)pieceTexture->width, (float)pieceTexture->height };
-
-            // For e2, flip horizontally if on right side
-            if (type == 2 && x > SCREEN_WIDTH / 2)
-            {
-                src.width = -src.width;
-            }
+            if (type == 2 && x > SCREEN_WIDTH / 2) src.width = -src.width; // flip e2 on right side
 
             Rectangle dst = { (float)x, (float)y, width, height };
             Vector2 origin = { width / 2.0f, height / 2.0f };
 
-            // Get rotation from physics body
-            float rotation = 0.0f;
-            if (specialPolygons[i]->body)
-            {
-                rotation = specialPolygons[i]->body->GetAngle() * RADTODEG;
-            }
-
+            float rotation = specialPolygons[i]->body ? specialPolygons[i]->body->GetAngle() * RADTODEG : 0.0f;
             DrawTexturePro(*pieceTexture, src, dst, origin, rotation, WHITE);
         }
         else
         {
-            // Fallback: draw the polygon outline in debug or if texture missing
-            static int logCount = 0;
-            if (logCount < 3)
-            {
-                LOG("Using fallback rendering for piece %zu: pieceTexture=%p, id=%d", i, pieceTexture, pieceTexture ? pieceTexture->id : 0);
-                logCount++;
-            }
-
+            // Outline fallback
+            int x = 0, y = 0; specialPolygons[i]->GetPosition(x, y);
             float angle_rad = specialPolygons[i]->body ? specialPolygons[i]->body->GetAngle() : 0.0f;
             Vector2 center = { (float)x, (float)y };
-
             std::vector<Vector2> screenPoints;
             for (size_t j = 0; j < tmxPoly.points.size(); j += 2)
             {
@@ -1217,18 +1217,16 @@ void ModuleGame::RenderPlayingState()
                 float rotatedY = localX * sinf(angle_rad) + localY * cosf(angle_rad);
                 screenPoints.push_back(Vector2{ center.x + rotatedX, center.y + rotatedY });
             }
-
             if (screenPoints.size() > 1)
             {
                 for (size_t j = 0; j < screenPoints.size(); ++j)
-                {
                     DrawLineV(screenPoints[j], screenPoints[(j + 1) % screenPoints.size()], YELLOW);
-                }
             }
         }
     }
 
     // Render flipper bases (BF from TMX)
+    static bool loggedBases = false;
     for (size_t i = 0; i < flipperBases.size(); ++i)
     {
         int x = 0, y = 0;
@@ -1237,6 +1235,12 @@ void ModuleGame::RenderPlayingState()
 
         if (flipperBaseTexture.id)
         {
+                if (!loggedBases && i == 0)
+                {
+                    LOG("Flipper base rendering: pos(%d,%d), width=%d, texture.id=%d", 
+                        x, y, flipperBases[i]->width, flipperBaseTexture.id);
+                    loggedBases = true;
+                }
             float bs = (float)flipperBases[i]->width / (float)flipperBaseTexture.width;
             int bw = (int)(flipperBaseTexture.width * bs);
             int bh = (int)(flipperBaseTexture.height * bs);
@@ -1251,56 +1255,33 @@ void ModuleGame::RenderPlayingState()
         }
     }
 
-    // =================================================================
-    // INICIO DE LA SECCIÓN CORREGIDA (Dibujar como polígono relleno)
-    // =================================================================
-    // Esta función auxiliar transforma los vértices de la hitbox y los dibuja.
-    auto draw_flipper_hitbox = [](PhysBody* flipperBody)
-        {
-            if (!flipperBody || !flipperBody->body) return;
-
-            b2Body* body = flipperBody->body;
-            b2Fixture* fixture = body->GetFixtureList();
-
-            // Recorrer todas las fixtures (aunque solo debería haber una)
-            for (; fixture; fixture = fixture->GetNext())
-            {
-                if (fixture->GetType() != b2Shape::e_polygon) continue;
-
-                b2PolygonShape* shape = (b2PolygonShape*)fixture->GetShape();
-                int vertexCount = shape->m_count; // Debería ser 4 para nuestra caja
-
-                if (vertexCount < 3) continue;
-
-                // Obtener los vértices de la hitbox en coordenadas del mundo (Box2D)
-                // Y convertirlos a coordenadas de pantalla (Raylib)
-                Vector2 screenVertices[b2_maxPolygonVertices];
-                int validVertices = 0;
-
-                for (int i = 0; i < vertexCount; ++i)
-                {
-                    // 1. Obtener vértice local
-                    b2Vec2 localPos = shape->m_vertices[i];
-                    // 2. Convertir a posición mundial
-                    b2Vec2 worldPos = body->GetWorldPoint(localPos);
-
-                    // 3. Convertir a píxeles de pantalla (Y-invertida)
-                    screenVertices[i].x = METERS_TO_PIXELS * worldPos.x;
-                    screenVertices[i].y = SCREEN_HEIGHT - (METERS_TO_PIXELS * worldPos.y);
-                    validVertices++;
-                }
-
-                if (validVertices == 4)
-                {
-                    // Dibujar el polígono relleno como dos triángulos (T1: 0,1,2 / T2: 0,2,3)
-                    DrawTriangle(screenVertices[0], screenVertices[1], screenVertices[2], WHITE);
-                    DrawTriangle(screenVertices[0], screenVertices[2], screenVertices[3], WHITE);
-                }
-            }
-        };
-
     // Render left flipper
-    draw_flipper_hitbox(leftFlipper);
+        static bool loggedFlipper = false;
+    if (leftFlipper && leftFlipper->body)
+    {
+        int x, y;
+        leftFlipper->GetPosition(x, y);
+        float angle = leftFlipper->body->GetAngle() * RADTODEG;
+
+        if (flipperTexture.id)
+        {
+                if (!loggedFlipper)
+                {
+                    LOG("Left flipper rendering: pos(%d,%d), angle=%.1f, texture.id=%d", 
+                        x, y, angle, flipperTexture.id);
+                    loggedFlipper = true;
+                }
+            float s = 80.0f / (float)flipperTexture.width;
+            int w = (int)(flipperTexture.width * s);
+            int h = (int)(flipperTexture.height * s);
+            Rectangle src = { 0,0,(float)flipperTexture.width,(float)flipperTexture.height };
+            Rectangle dst = { (float)x, (float)y, (float)w, (float)h };
+            // Flipper texture is at 45° to top-right in the PNG. We need to add 45° offset.
+            // The pivot is on the left side for left flipper (15% from left edge)
+            Vector2 origin = { w * 0.15f, h / 2.0f };
+            DrawTexturePro(flipperTexture, src, dst, origin, angle + 45.0f, WHITE);
+        }
+    }
 
     // Render right flipper
     draw_flipper_hitbox(rightFlipper);
@@ -1792,14 +1773,16 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
             continue;
         }
 
-        char* nameTag = strstr(filePtr, "name=\"");
-        bool isSpecialPoly = false;
+    char* nameTag = strstr(filePtr, "name=\"");
+    bool isSpecialPoly = false;
+    int polyType = 0; // 1=e1, 2=e2
 
         if (nameTag && nameTag < objectEnd)
         {
             if (strncmp(nameTag + 6, "e1", 2) == 0 || strncmp(nameTag + 6, "e2", 2) == 0)
             {
                 isSpecialPoly = true;
+                polyType = (nameTag[6] == 'e' && nameTag[7] == '1') ? 1 : 2;
             }
 
             float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
@@ -1841,51 +1824,21 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
             }
             else if (strncmp(nameTag + 6, "e1", 2) == 0)
             {
-                // e1 = piece1.png (triangular extra piece)
-                char* polygonMarker = strstr(filePtr, "<polygon points=\"");
-
-                // **FIX:** Manually check, do NOT rely on 'attributesFound'
-                char* xStr_e1 = strstr(filePtr, "x=\"");
-                char* yStr_e1 = strstr(filePtr, "y=\"");
-
-                if (polygonMarker && polygonMarker < objectEnd && xStr_e1 && xStr_e1 < objectEnd && yStr_e1 && yStr_e1 < objectEnd)
-                {
-                    float x_e1 = (float)atof(xStr_e1 + 3);
-                    float y_e1 = (float)atof(yStr_e1 + 3);
-
-                    Rectangle rect = { x_e1, y_e1, 0, 0 }; // W/H are not needed here
-                    tmxExtraPiecesWithType.push_back({ rect, 1 });
-                    LOG("TMX parse: Found e1 (piece1) at (%.0f, %.0f)", x_e1, y_e1);
-                    objectsFound++;
-                }
+                // e1 tracked as special polygon; width/height may be absent for polygon objects
+                LOG("TMX parse: Found e1 (piece1) at (%.0f, %.0f)", x, y);
+                objectsFound++;
             }
             else if (strncmp(nameTag + 6, "e2", 2) == 0)
             {
-                // e2 = piece2.png (triangular extra piece)
-                char* polygonMarker = strstr(filePtr, "<polygon points=\"");
-
-                // **FIX:** Manually check, do NOT rely on 'attributesFound'
-                char* xStr_e2 = strstr(filePtr, "x=\"");
-                char* yStr_e2 = strstr(filePtr, "y=\"");
-
-                if (polygonMarker && polygonMarker < objectEnd && xStr_e2 && xStr_e2 < objectEnd && yStr_e2 && yStr_e2 < objectEnd)
+                // e2 tracked as special polygon; width/height may be absent for polygon objects
+                float rotation = 0.0f;
+                char* rotStr = strstr(filePtr, "rotation=\"");
+                if (rotStr && rotStr < objectEnd)
                 {
-                    float x_e2 = (float)atof(xStr_e2 + 3);
-                    float y_e2 = (float)atof(yStr_e2 + 3);
-
-                    // Get rotation attribute
-                    float rotation = 0.0f;
-                    char* rotStr = strstr(filePtr, "rotation=\"");
-                    if (rotStr && rotStr < objectEnd)
-                    {
-                        rotation = (float)atof(rotStr + 10);
-                    }
-
-                    Rectangle rect = { x_e2, y_e2, 0, 0 }; // W/H are not needed here
-                    tmxExtraPiecesWithType.push_back({ rect, 2 });
-                    LOG("TMX parse: Found e2 (piece2) at (%.0f, %.0f) rotation %.1f", x_e2, y_e2, rotation);
-                    objectsFound++;
+                    rotation = (float)atof(rotStr + 10);
                 }
+                LOG("TMX parse: Found e2 (piece2) at (%.0f, %.0f) rotation %.1f", x, y, rotation);
+                objectsFound++;
             }
             else if (strncmp(nameTag + 6, "BF", 2) == 0)
             {
@@ -1905,10 +1858,23 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
                     objectsFound++;
                 }
             }
-            // =================================================================
-            // EL BLOQUE "else if (strncmp(nameTag + 6, "FB", 2) == 0)"
-            // HA SIDO ELIMINADO COMPLETAMENTE
-            // =================================================================
+            else if (strncmp(nameTag + 6, "FB", 2) == 0)
+            {
+                // FB = flipper (flipper bat.png)
+                if (attributesFound)
+                {
+                    float rotation = 0.0f;
+                    char* rotStr = strstr(filePtr, "rotation=\"");
+                    if (rotStr && rotStr < objectEnd)
+                    {
+                        rotation = (float)atof(rotStr + 10);
+                    }
+                    Rectangle rect = { x, y, w, h };
+                    tmxFlippers.push_back({ rect, rotation });
+                    LOG("TMX parse: Found flipper at (%.0f, %.0f) rotation %.1f", x, y, rotation);
+                    objectsFound++;
+                }
+            }
         }
 
         const char* polylineMarker = "<polyline points=\"";
@@ -1958,7 +1924,7 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
             }
         }
 
-        const char* polygonMarker = "<polygon points=\"";
+    const char* polygonMarker = "<polygon points=\"";
         char* polygonStart = strstr(filePtr, polygonMarker);
 
         if (isSpecialPoly && polygonStart && polygonStart < objectEnd)
@@ -1988,8 +1954,10 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
                     poly.x = offsetX;
                     poly.y = offsetY;
                     poly.rotation = rotation;
+                    poly.type = polyType;
 
                     char* token = strtok(pointsStr, " ,");
+                    float minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
                     while (token != NULL)
                     {
                         float px = (float)atof(token);
@@ -2000,12 +1968,26 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
                         // **CLAVE: Guardar coordenadas TMX SIN escalar**
                         poly.points.push_back((int)px);
                         poly.points.push_back((int)py);
+                        if (px < minX) minX = px; if (px > maxX) maxX = px;
+                        if (py < minY) minY = py; if (py > maxY) maxY = py;
                         token = strtok(NULL, " ,");
                     }
                     free(pointsStr);
                     tmxSpecialPolygons.push_back(poly);
                     LOG("TMX parse: Found Special Polygon at TMX(%.0f, %.0f) with %d points, rotation %.0f",
                         offsetX, offsetY, (int)poly.points.size() / 2, rotation);
+                    // Derive a bounding rect for rendering sizes (even if width/height missing)
+                    if (polyType == 1 || polyType == 2)
+                    {
+                        float bx = offsetX + minX;
+                        float by = offsetY + minY;
+                        float bw = (maxX - minX);
+                        float bh = (maxY - minY);
+                        if (bw > 0 && bh > 0)
+                        {
+                            tmxExtraPiecesWithType.push_back({ Rectangle{ bx, by, bw, bh }, polyType });
+                        }
+                    }
                     objectsFound++;
                 }
             }

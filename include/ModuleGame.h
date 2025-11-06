@@ -40,6 +40,10 @@ struct MovingTarget {
     bool movingDown;
 };
 
+struct TmxPolygon {
+    float x, y, rotation;
+    std::vector<int> points;
+
 class ModuleGame : public Module
 {
 public:

@@ -42,12 +42,10 @@ std::vector<b2Vec2> FilterCloseVertices(b2Vec2* vertices, int count, float minDi
 
 ModulePhysics::ModulePhysics(Application* app, bool start_enabled) : Module(app, start_enabled)
 {
-	world = NULL;
-	mouseJoint = NULL;
-	debug = false;
-	world = nullptr;
-	mouse_joint = nullptr;
-	ground = nullptr;
+    debug = false;
+    world = nullptr;
+    mouseJoint = nullptr;
+    ground = nullptr;
 }
 
 ModulePhysics::~ModulePhysics()
@@ -689,26 +687,10 @@ b2RevoluteJoint* ModulePhysics::CreateFlipper(int x, int y, int width, int heigh
 	}
 
 	jointDef.enableLimit = true;
-<<<<<<< HEAD
-=======
-	
-	// Set angle limits - flippers rotate from down to up
-	if(isLeft)
-	{
-		jointDef.lowerAngle = -5 * DEGTORAD;  // Resting position (slightly down)
-		jointDef.upperAngle = 45 * DEGTORAD;  // Activated position (up)
-	}
-	else
-	{
-		jointDef.lowerAngle = -45 * DEGTORAD; // Activated position (up)  
-		jointDef.upperAngle = 5 * DEGTORAD;   // Resting position (slightly down)
-	}
-	
-	jointDef.maxMotorTorque = 2000.0f; // Very strong motor for snappy flippers
-	jointDef.motorSpeed = 0.0f;
->>>>>>> 409bfea (WIP: TMX-driven objects, flipper fixes, DrawTextEx font usage)
+	// Strong motor and enabled
 	jointDef.enableMotor = true;
-	jointDef.maxMotorTorque = 100.0f;
+	jointDef.maxMotorTorque = 2000.0f;
+	jointDef.motorSpeed = 0.0f;
 
 	b2RevoluteJoint* joint = (b2RevoluteJoint*)world->CreateJoint(&jointDef);
 

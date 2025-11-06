@@ -19,6 +19,7 @@ enum CollisionType
     COLLISION_BUMPER,
     COLLISION_TARGET,
     COLLISION_COMBO_LETTER,
+    COLLISION_SPECIAL_POLYGON,
     COLLISION_SPECIAL_TARGET,
     COLLISION_BALL_LOSS_SENSOR,
     COLLISION_BLACK_HOLE
@@ -43,6 +44,7 @@ struct MovingTarget {
 struct TmxPolygon {
     float x, y, rotation;
     std::vector<int> points;
+};
 
 class ModuleGame : public Module
 {
@@ -118,6 +120,7 @@ public:
     std::vector<PhysBody*> specialTargets;
     // TMX-driven objects
     std::vector<PhysBody*> extraPieces;  // e1 and e2 pieces from TMX
+    std::vector<PhysBody*> specialPolygons; // from TMX polygons
     std::vector<PhysBody*> blackHoles;
     std::vector<PhysBody*> flipperBases; // bf objects from TMX
     std::vector<StarLetter> starLetters;
@@ -172,6 +175,7 @@ public:
     std::vector<std::pair<Rectangle, int>> tmxExtraPiecesWithType; // type: 1=e1, 2=e2
     std::vector<std::pair<Rectangle, float>> tmxFlipperBases; // position and rotation
     std::vector<std::pair<Rectangle, float>> tmxFlippers; // position and rotation
+    std::vector<TmxPolygon> tmxSpecialPolygons; // polygons from TMX
     PhysBody* mapBoundary = nullptr;
     float scoreFlashTimer = 0.0f;
     bool scoreFlashActive = false;

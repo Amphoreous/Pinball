@@ -31,11 +31,7 @@ ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start
     piece1Texture = { 0 };
     piece2Texture = { 0 };
     targetTexture = { 0 };
-<<<<<<< HEAD
-    specialTargetTexture = { 0 };
     blackHoleTexture = { 0 };
-=======
->>>>>>> 409bfea (WIP: TMX-driven objects, flipper fixes, DrawTextEx font usage)
     letterSTexture = { 0 };
     letterTTexture = { 0 };
     letterATexture = { 0 };
@@ -218,7 +214,7 @@ bool ModuleGame::Start()
         }
     }
 
-<<<<<<< HEAD
+// Special polygons defined in TMX (triangles etc.)
     LOG("Creating special polygons from TMX data...");
     for (const auto& poly : tmxSpecialPolygons)
     {
@@ -296,7 +292,7 @@ bool ModuleGame::Start()
     if (leftFlipper) leftFlipper->listener = this;
     if (rightFlipper) rightFlipper->listener = this;
 
-    // Continue with TMX-driven setup
+    // Continue with TMX-driven setup for flippers from TMX
     LOG("Creating flippers from TMX data...");
 
     CreateBallLossSensor();
@@ -496,26 +492,19 @@ bool ModuleGame::CleanUp()
         }
     }
     targets.clear();
-<<<<<<< HEAD
-
     bumpers.clear();
     specialTargets.clear();
     specialPolygons.clear();
-=======
     extraPieces.clear();
     flipperBases.clear();
->>>>>>> 409bfea (WIP: TMX-driven objects, flipper fixes, DrawTextEx font usage)
     blackHoles.clear();
     mapCollisionPoints.clear();
     tmxBlackHoles.clear();
     tmxBumpers.clear();
-<<<<<<< HEAD
     tmxSpecialPolygons.clear();
-=======
     tmxExtraPiecesWithType.clear();
     tmxFlipperBases.clear();
     tmxFlippers.clear();
->>>>>>> 409bfea (WIP: TMX-driven objects, flipper fixes, DrawTextEx font usage)
 
     return true;
 }
@@ -1234,25 +1223,11 @@ void ModuleGame::RenderPlayingState()
         if (!extraPieces[i]) continue;
         extraPieces[i]->GetPosition(x, y);
 
-<<<<<<< HEAD
-        if (spaceshipTexture.id)
-        {
-            float scale = 0.06f;
-            int width = (int)(spaceshipTexture.width * scale);
-            int height = (int)(spaceshipTexture.height * scale);
-            Rectangle src = { 0,0,(float)spaceshipTexture.width,(float)spaceshipTexture.height };
-            Rectangle dst = { (float)x, (float)y, (float)width, (float)height };
-            Vector2 origin = { width / 2.0f, height / 2.0f };
-            DrawTexturePro(spaceshipTexture, src, dst, origin, 0.0f, WHITE);
-        }
-        else if (specialTargetTexture.id)
-=======
         // Determine which texture to use based on index (first ones are e1, later ones are e2)
         Texture2D* pieceTexture = (i < tmxExtraPiecesWithType.size() && tmxExtraPiecesWithType[i].second == 1) ? 
                                    &piece1Texture : &piece2Texture;
         
         if (pieceTexture->id)
->>>>>>> 409bfea (WIP: TMX-driven objects, flipper fixes, DrawTextEx font usage)
         {
             float scale = (float)extraPieces[i]->width / (float)pieceTexture->width;
             int width = (int)(pieceTexture->width * scale);
@@ -1851,13 +1826,10 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
     mapCollisionPoints.clear();
     tmxBlackHoles.clear();
     tmxBumpers.clear();
-<<<<<<< HEAD
     tmxSpecialPolygons.clear();
-=======
     tmxExtraPiecesWithType.clear();
     tmxFlipperBases.clear();
     tmxFlippers.clear();
->>>>>>> 409bfea (WIP: TMX-driven objects, flipper fixes, DrawTextEx font usage)
 
     char* filePtr = fileContent;
     int objectsFound = 0;

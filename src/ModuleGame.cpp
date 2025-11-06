@@ -134,10 +134,18 @@ bool ModuleGame::Start()
     if (blackHoleTexture.id == 0) LOG("Warning: Failed to load blackHole texture");
 
     piece1Texture = LoadTexture("assets/extra/piece1.png");
-    if (piece1Texture.id == 0) LOG("Warning: Failed to load piece1 texture");
+    if (piece1Texture.id == 0) {
+        LOG("Warning: Failed to load piece1 texture");
+    } else {
+        LOG("Loaded piece1 texture, ID: %d", piece1Texture.id);
+    }
 
     piece2Texture = LoadTexture("assets/extra/piece2.png");
-    if (piece2Texture.id == 0) LOG("Warning: Failed to load piece2 texture");
+    if (piece2Texture.id == 0) {
+        LOG("Warning: Failed to load piece2 texture");
+    } else {
+        LOG("Loaded piece2 texture, ID: %d", piece2Texture.id);
+    }
 
     targetTexture = LoadTexture("assets/extra/piece1.png");
 
@@ -208,7 +216,7 @@ bool ModuleGame::Start()
         if (b)
         {
             if (b->body && b->body->GetFixtureList())
-                b->body->GetFixtureList()->SetRestitution(0.8f);
+                b->body->GetFixtureList()->SetRestitution(1.5f);
             b->listener = this;
             bumpers.push_back(b);
         }
@@ -241,7 +249,7 @@ bool ModuleGame::Start()
         if (p)
         {
             if (p->body && p->body->GetFixtureList())
-                p->body->GetFixtureList()->SetRestitution(0.5f);
+                p->body->GetFixtureList()->SetRestitution(1.5f);
             p->listener = this;
             specialPolygons.push_back(p);
         }
@@ -278,39 +286,8 @@ bool ModuleGame::Start()
         }
     }
 
-    LOG("Creating extra pieces (e1/e2) from TMX data...");
-    for (const auto& piecePair : tmxExtraPiecesWithType)
-    {
-        const Rectangle& rect = piecePair.first;
-        int type = piecePair.second;
-
-        float tmx_cx = rect.x + (rect.width / 2.0f);
-        float tmx_cy = rect.y + (rect.height / 2.0f);
-        float tmx_w = rect.width;
-        float tmx_h = rect.height;
-
-        int screen_x = (int)roundf(tmx_cx * scaleX);
-        int screen_y = (int)roundf(tmx_cy * scaleY);
-        int screen_w = (int)roundf(tmx_w * scaleX);
-        int screen_h = (int)roundf(tmx_h * scaleY);
-
-        LOG("Creating extra piece type %d at TMX(%.0f, %.0f) -> Screen(%d, %d)",
-            type, tmx_cx, tmx_cy, screen_x, screen_y);
-
-        PhysBody* piece = App->physics->CreateRectangle(screen_x, screen_y, screen_w, screen_h, b2_staticBody);
-        if (piece)
-        {
-            if (piece->body && piece->body->GetFixtureList())
-            {
-                // type == 2 es e2, type == 1 es e1
-                float restitution = (type == 2) ? 0.01f : 0.7f;
-                piece->body->GetFixtureList()->SetRestitution(restitution);
-            }
-            piece->listener = this;
-            extraPieces.push_back(piece);
-        }
-    }
-
+    // Note: e1/e2 extra pieces are created from tmxSpecialPolygons in the special polygons loop below
+    // They use actual polygon vertices from TMX for proper triangular shapes
 
     LOG("Creating flipper bases (BF) from TMX data...");
     for (const auto& basePair : tmxFlipperBases)
@@ -1148,55 +1125,92 @@ void ModuleGame::RenderPlayingState()
         }
     }
 
-    // Render extra pieces (e1/e2 from TMX)
-    for (size_t i = 0; i < extraPieces.size() && i < tmxExtraPiecesWithType.size(); ++i)
+    // Render extra pieces (e1/e2 from TMX) using special polygons
+    // These are the actual polygon shapes parsed from TMX
+    const int TMX_MAP_W = 1280;
+    const int TMX_MAP_H = 1600;
+    float scaleX = (float)SCREEN_WIDTH / (float)TMX_MAP_W;
+    float scaleY = (float)SCREEN_HEIGHT / (float)TMX_MAP_H;
+
+    static bool logged = false;
+    if (!logged)
+    {
+        LOG("Rendering special polygons: specialPolygons.size()=%zu, tmxSpecialPolygons.size()=%zu, tmxExtraPiecesWithType.size()=%zu", 
+            specialPolygons.size(), tmxSpecialPolygons.size(), tmxExtraPiecesWithType.size());
+        logged = true;
+    }
+
+    for (size_t i = 0; i < specialPolygons.size() && i < tmxSpecialPolygons.size() && i < tmxExtraPiecesWithType.size(); ++i)
     {
         int x = 0, y = 0;
-        if (!extraPieces[i]) continue;
-        extraPieces[i]->GetPosition(x, y);
+        if (!specialPolygons[i]) continue;
+        specialPolygons[i]->GetPosition(x, y);
 
+        const TmxPolygon& tmxPoly = tmxSpecialPolygons[i];
         int type = tmxExtraPiecesWithType[i].second;
-        const Rectangle& tmxRect = tmxExtraPiecesWithType[i].first;
         
         // e1 → piece1.png, e2 → piece2.png
         Texture2D* pieceTexture = (type == 1) ? &piece1Texture : &piece2Texture;
         
-        if (pieceTexture->id)
+        if (pieceTexture && pieceTexture->id)
         {
-            float scale = (float)extraPieces[i]->width / (float)pieceTexture->width;
-            int width = (int)(pieceTexture->width * scale);
-            int height = (int)(pieceTexture->height * scale);
+            // Use the TMX bounding rectangle to get correct dimensions
+            const Rectangle& tmxRect = tmxExtraPiecesWithType[i].first;
+            
+            // Calculate scaled dimensions from TMX
+            float width = tmxRect.width * scaleX;
+            float height = tmxRect.height * scaleY;
             
             Rectangle src = { 0, 0, (float)pieceTexture->width, (float)pieceTexture->height };
             
-            // For e2, check rotation from TMX to flip horizontally if needed (right side)
-            // TMX shows rotation="15" for right e2, rotation="-15" for left e2
-            // We flip texture source if rotation > 0 (right side)
-            if (type == 2)
+            // For e2, flip horizontally if on right side
+            if (type == 2 && x > SCREEN_WIDTH / 2)
             {
-                // Parse rotation from TMX to determine if we need to flip
-                // Simplification: if x > screen center, flip horizontally
-                if (x > SCREEN_WIDTH / 2)
-                {
-                    src.width = -src.width; // Flip horizontally
-                }
+                src.width = -src.width;
             }
             
-            Rectangle dst = { (float)x, (float)y, (float)width, (float)height };
+            Rectangle dst = { (float)x, (float)y, width, height };
             Vector2 origin = { width / 2.0f, height / 2.0f };
             
             // Get rotation from physics body
             float rotation = 0.0f;
-            if (extraPieces[i]->body)
+            if (specialPolygons[i]->body)
             {
-                rotation = extraPieces[i]->body->GetAngle() * RADTODEG;
+                rotation = specialPolygons[i]->body->GetAngle() * RADTODEG;
             }
             
             DrawTexturePro(*pieceTexture, src, dst, origin, rotation, WHITE);
         }
         else
         {
-            DrawCircle(x, y, 15, YELLOW);
+            // Fallback: draw the polygon outline in debug or if texture missing
+            static int logCount = 0;
+            if (logCount < 3)
+            {
+                LOG("Using fallback rendering for piece %zu: pieceTexture=%p, id=%d", i, pieceTexture, pieceTexture ? pieceTexture->id : 0);
+                logCount++;
+            }
+            
+            float angle_rad = specialPolygons[i]->body ? specialPolygons[i]->body->GetAngle() : 0.0f;
+            Vector2 center = { (float)x, (float)y };
+
+            std::vector<Vector2> screenPoints;
+            for (size_t j = 0; j < tmxPoly.points.size(); j += 2)
+            {
+                float localX = tmxPoly.points[j] * scaleX;
+                float localY = tmxPoly.points[j + 1] * scaleY;
+                float rotatedX = localX * cosf(angle_rad) - localY * sinf(angle_rad);
+                float rotatedY = localX * sinf(angle_rad) + localY * cosf(angle_rad);
+                screenPoints.push_back(Vector2{ center.x + rotatedX, center.y + rotatedY });
+            }
+
+            if (screenPoints.size() > 1)
+            {
+                for (size_t j = 0; j < screenPoints.size(); ++j)
+                {
+                    DrawLineV(screenPoints[j], screenPoints[(j + 1) % screenPoints.size()], YELLOW);
+                }
+            }
         }
     }
 
@@ -1220,52 +1234,6 @@ void ModuleGame::RenderPlayingState()
         else
         {
             DrawCircle(x, y, (float)flipperBases[i]->width / 2.0f, DARKGRAY);
-        }
-    }
-
-    if (!showDebug)
-    {
-        const int TMX_MAP_W = 1280;
-        const int TMX_MAP_H = 1600;
-        float scaleX = (float)SCREEN_WIDTH / (float)TMX_MAP_W;
-        float scaleY = (float)SCREEN_HEIGHT / (float)TMX_MAP_H;
-
-        for (size_t i = 0; i < specialPolygons.size(); ++i)
-        {
-            if (!specialPolygons[i] || !specialPolygons[i]->body || i >= tmxSpecialPolygons.size()) continue;
-
-            PhysBody* pBody = specialPolygons[i];
-            const TmxPolygon& tmxPoly = tmxSpecialPolygons[i];
-
-            int x, y;
-            pBody->GetPosition(x, y);
-            float angle_rad = pBody->body->GetAngle();
-
-            Vector2 center = { (float)x, (float)y };
-
-            std::vector<Vector2> screenPoints;
-            for (size_t j = 0; j < tmxPoly.points.size(); j += 2)
-            {
-                // Aplicamos escalado a los puntos relativos del TMX
-                float localX = tmxPoly.points[j] * scaleX;
-                float localY = tmxPoly.points[j + 1] * scaleY;
-
-                // Aplicamos rotaci�n
-                float rotatedX = localX * cosf(angle_rad) - localY * sinf(angle_rad);
-                float rotatedY = localX * sinf(angle_rad) + localY * cosf(angle_rad);
-
-                // Sumamos la posici�n central (ya escalada)
-                screenPoints.push_back(Vector2{ center.x + rotatedX, center.y + rotatedY });
-            }
-
-            // Dibujamos el pol�gono
-            if (screenPoints.size() > 1)
-            {
-                for (size_t j = 0; j < screenPoints.size(); ++j)
-                {
-                    DrawLineV(screenPoints[j], screenPoints[(j + 1) % screenPoints.size()], PURPLE);
-                }
-            }
         }
     }
 
@@ -1478,7 +1446,7 @@ void ModuleGame::LaunchBall()
 
     LOG("Launching ball with force: %.2f", kickerForce);
 
-    b2Vec2 impulse(0.0f, -kickerForce * 0.5f);
+    b2Vec2 impulse(0.0f, -kickerForce);
     ball->body->ApplyLinearImpulseToCenter(impulse, true);
 
     ballLaunched = true;

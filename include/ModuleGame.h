@@ -129,7 +129,7 @@ public:
 
     Texture2D ballTexture = { 0 };
     Texture2D backgroundTexture = { 0 };
-    // --- flipperTexture ELIMINADO ---
+    Texture2D flipperTexture = { 0 };
     Texture2D flipperBaseTexture = { 0 };
     Texture2D bumper1Texture = { 0 };
     Texture2D bumper2Texture = { 0 };

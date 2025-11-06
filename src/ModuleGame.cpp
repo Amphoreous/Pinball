@@ -114,9 +114,13 @@ bool ModuleGame::Start()
     ballTexture = LoadTexture("assets/balls/Planet1.png");
     if (ballTexture.id == 0) LOG("Warning: Failed to load ball texture");
 
-    // --- ELIMINADO: Carga de flipperTexture ---
-    // flipperTexture = LoadTexture("assets/flippers/flipper bat.png");
-    // if (flipperTexture.id == 0) LOG("Warning: Failed to load flipper texture");
+    flipperTexture = LoadTexture("assets/flippers/flipper bat.png");
+    if (flipperTexture.id == 0) {
+        LOG("Warning: Failed to load flipper texture");
+    }
+    else {
+        LOG("Loaded flipper bat texture, ID: %d", flipperTexture.id);
+    }
 
     flipperBaseTexture = LoadTexture("assets/flippers/Base Flipper Bat.png");
     if (flipperBaseTexture.id == 0) LOG("Warning: Failed to load flipper base texture");
@@ -400,8 +404,7 @@ bool ModuleGame::CleanUp()
 
     if (backgroundTexture.id) UnloadTexture(backgroundTexture);
     if (ballTexture.id) UnloadTexture(ballTexture);
-    // --- ELIMINADO: Descarga de flipperTexture ---
-    // if (flipperTexture.id) UnloadTexture(flipperTexture);
+    if (flipperTexture.id) UnloadTexture(flipperTexture);
     if (flipperBaseTexture.id) UnloadTexture(flipperBaseTexture);
     if (bumper1Texture.id) UnloadTexture(bumper1Texture);
     if (bumper2Texture.id) UnloadTexture(bumper2Texture);
@@ -937,20 +940,21 @@ void ModuleGame::UpdatePlayingState()
         LaunchBall();
     }
 
+    // Flipper motor control: ensure key press rotates bat upward (toward playfield center)
     if (leftFlipperJoint)
     {
         if (IsKeyDown(KEY_LEFT))
-            leftFlipperJoint->SetMotorSpeed(30.0f);  // Fast upward rotation
+            leftFlipperJoint->SetMotorSpeed(30.0f);  // upward
         else
-            leftFlipperJoint->SetMotorSpeed(-15.0f); // Fall back down
+            leftFlipperJoint->SetMotorSpeed(-15.0f);   // return downward
     }
 
     if (rightFlipperJoint)
     {
         if (IsKeyDown(KEY_RIGHT))
-            rightFlipperJoint->SetMotorSpeed(-30.0f); // Fast upward rotation
+            rightFlipperJoint->SetMotorSpeed(-30.0f);  // upward (mirror)
         else
-            rightFlipperJoint->SetMotorSpeed(15.0f);  // Fall back down
+            rightFlipperJoint->SetMotorSpeed(15.0f); // return downward
     }
 }
 
@@ -1009,7 +1013,7 @@ void ModuleGame::RenderPlayingState()
     int starStartX = comboTextX + 100;
     int starY = 20;
 
-    DrawText("COMBO:", comboTextX, starY, 20, YELLOW);
+    DrawTextEx(font, "COMBO:", { (float)comboTextX, (float)starY }, 20, 1, YELLOW);
     const char* star = "STAR";
     for (int i = 0; i < 4; ++i)
     {
@@ -1017,18 +1021,18 @@ void ModuleGame::RenderPlayingState()
 
         if (comboCompleteEffect && i < gameData.comboProgress) {
             float pulse = sinf(comboCompleteTimer * 20.0f) * 5.0f + 25.0f;
-            DrawText(TextFormat("%c", star[i]), starStartX + i * 25, starY, (int)pulse, comboCompleteFlashColor);
+            DrawTextEx(font, TextFormat("%c", star[i]), { (float)(starStartX + i * 25), (float)starY }, pulse, 1, comboCompleteFlashColor);
         }
         else {
-            DrawText(TextFormat("%c", star[i]), starStartX + i * 25, starY, 25, letterColor);
+            DrawTextEx(font, TextFormat("%c", star[i]), { (float)(starStartX + i * 25), (float)starY }, 25, 1, letterColor);
         }
     }
 
     if (scoreFlashActive && lastScoreIncrease > 0) {
         Color flashColor = YELLOW;
         if (scoreFlashTimer < 0.25f) {
-            DrawText(TextFormat("+%d!", lastScoreIncrease),
-                SCREEN_WIDTH / 2 - 40, 100, 30, flashColor);
+            DrawTextEx(font, TextFormat("+%d!", lastScoreIncrease),
+                { (float)(SCREEN_WIDTH / 2 - 40), 100.0f }, 30, 1, flashColor);
         }
     }
 
@@ -1059,7 +1063,7 @@ void ModuleGame::RenderPlayingState()
                 }
                 else {
                     DrawCircle(x, y, 15, ORANGE);
-                    DrawText(TextFormat("%c", starLetter.letter), x - 5, y - 10, 20, WHITE);
+                    DrawTextEx(font, TextFormat("%c", starLetter.letter), { (float)(x - 5), (float)(y - 10) }, 20, 1, WHITE);
                 }
             }
         }
@@ -1068,7 +1072,7 @@ void ModuleGame::RenderPlayingState()
     if (IsKeyDown(KEY_DOWN) && !ballLaunched)
     {
         float chargePercent = kickerForce / MAX_KICKER_FORCE;
-        DrawText("CHARGING...", SCREEN_WIDTH / 2 - 80, SCREEN_HEIGHT - 100, 25, YELLOW);
+        DrawTextEx(font, "CHARGING...", { (float)(SCREEN_WIDTH / 2 - 80), (float)(SCREEN_HEIGHT - 100) }, 25, 1, YELLOW);
         DrawRectangle(SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT - 60, 200, 20, DARKGRAY);
         DrawRectangle(SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT - 60, (int)(200 * chargePercent), 20, GREEN);
     }
@@ -1080,7 +1084,7 @@ void ModuleGame::RenderPlayingState()
         DrawRectangle(x - ballLossSensor->width / 2, y - ballLossSensor->height / 2,
             ballLossSensor->width, ballLossSensor->height,
             Color{ 255, 0, 0, 100 });
-        DrawText("BALL LOSS SENSOR", x - 80, y - 20, 12, RED);
+        DrawTextEx(font, "BALL LOSS SENSOR", { (float)(x - 80), (float)(y - 20) }, 12, 1, RED);
     }
 
     // Render bumpers (B1, B2, B3) with their specific textures
@@ -1154,44 +1158,95 @@ void ModuleGame::RenderPlayingState()
         logged = true;
     }
 
-    for (size_t i = 0; i < specialPolygons.size() && i < tmxSpecialPolygons.size() && i < tmxExtraPiecesWithType.size(); ++i)
+    // Precompute flipper base screen positions for potential anchoring (used to attach e2 to base)
+    std::vector<Vector2> flipperBasePositions;
+    for (size_t bi = 0; bi < flipperBases.size(); ++bi)
+    {
+        if (!flipperBases[bi]) continue;
+        int bx = 0, by = 0;
+        flipperBases[bi]->GetPosition(bx, by);
+        flipperBasePositions.push_back(Vector2{ (float)bx, (float)by });
+    }
+
+    for (size_t i = 0; i < specialPolygons.size() && i < tmxSpecialPolygons.size(); ++i)
     {
         int x = 0, y = 0;
         if (!specialPolygons[i]) continue;
         specialPolygons[i]->GetPosition(x, y);
 
         const TmxPolygon& tmxPoly = tmxSpecialPolygons[i];
-        int type = tmxExtraPiecesWithType[i].second;
+        int type = tmxPoly.type;  // Use the type stored directly in TmxPolygon
 
         // e1 → piece1.png, e2 → piece2.png
         Texture2D* pieceTexture = (type == 1) ? &piece1Texture : &piece2Texture;
 
         if (pieceTexture && pieceTexture->id)
         {
-            // Use the TMX bounding rectangle to get correct dimensions
-            const Rectangle& tmxRect = tmxExtraPiecesWithType[i].first;
-
-            // Calculate scaled dimensions from TMX
-            float width = tmxRect.width * scaleX;
-            float height = tmxRect.height * scaleY;
-
-            Rectangle src = { 0, 0, (float)pieceTexture->width, (float)pieceTexture->height };
-
-            // For e2, flip horizontally if on right side
-            if (type == 2 && x > SCREEN_WIDTH / 2)
+            // Calculate bounding box dimensions from polygon points (TMX local coords)
+            float minX = FLT_MAX, minY = FLT_MAX, maxX = -FLT_MAX, maxY = -FLT_MAX;
+            for (size_t j = 0; j < tmxPoly.points.size(); j += 2)
             {
-                src.width = -src.width;
+                float px = tmxPoly.points[j];
+                float py = tmxPoly.points[j + 1];
+                if (px < minX) minX = px;
+                if (px > maxX) maxX = px;
+                if (py < minY) minY = py;
+                if (py > maxY) maxY = py;
             }
 
-            Rectangle dst = { (float)x, (float)y, width, height };
-            Vector2 origin = { width / 2.0f, height / 2.0f };
+            // Calculate scaled dimensions from TMX
+            float width = (maxX - minX) * scaleX;
+            float height = (maxY - minY) * scaleY;
 
-            // Get rotation from physics body
+            // Default texture center: use physics body position
+            Vector2 center = { (float)x, (float)y };
+
+            // Get rotation from physics body (degrees)
             float rotation = 0.0f;
             if (specialPolygons[i]->body)
             {
                 rotation = specialPolygons[i]->body->GetAngle() * RADTODEG;
             }
+
+            // If this is an e2 piece, try to anchor its bottom-right corner to the nearest flipper base
+            if (type == 2 && !flipperBasePositions.empty())
+            {
+                // find nearest base
+                float bestDist = FLT_MAX;
+                Vector2 bestBase = { 0.0f, 0.0f };
+                for (const auto &bp : flipperBasePositions)
+                {
+                    float dx = bp.x - (float)x;
+                    float dy = bp.y - (float)y;
+                    float d2 = dx*dx + dy*dy;
+                    if (d2 < bestDist) { bestDist = d2; bestBase = bp; }
+                }
+
+                // If the nearest base is reasonably close, snap bottom-right to it
+                const float maxSnapDist = 200.0f * 200.0f; // squared threshold (~200px)
+                if (bestDist < maxSnapDist)
+                {
+                    float ang_rad = rotation * DEGTORAD;
+                    // vector from center to bottom-right corner in local (unrotated) coords
+                    Vector2 localBR = { width * 0.5f, height * 0.5f };
+                    // rotate localBR by rotation
+                    Vector2 rotatedBR = { localBR.x * cosf(ang_rad) - localBR.y * sinf(ang_rad),
+                                           localBR.x * sinf(ang_rad) + localBR.y * cosf(ang_rad) };
+                    // center = base - rotatedBR so that bottom-right corner lands on base
+                    center.x = bestBase.x - rotatedBR.x;
+                    center.y = bestBase.y - rotatedBR.y;
+                }
+            }
+
+            Rectangle src = { 0, 0, (float)pieceTexture->width, (float)pieceTexture->height };
+            if (type == 2)
+            {
+                // flip horizontally if needed depending on base side
+                if (center.x > SCREEN_WIDTH / 2) src.width = -src.width;
+            }
+
+            Rectangle dst = { center.x, center.y, width, height };
+            Vector2 origin = { width / 2.0f, height / 2.0f };
 
             DrawTexturePro(*pieceTexture, src, dst, origin, rotation, WHITE);
         }
@@ -1252,60 +1307,60 @@ void ModuleGame::RenderPlayingState()
     }
 
     // =================================================================
-    // INICIO DE LA SECCIÓN CORREGIDA (Dibujar como polígono relleno)
+    // Render Flippers with Texture
     // =================================================================
-    // Esta función auxiliar transforma los vértices de la hitbox y los dibuja.
-    auto draw_flipper_hitbox = [](PhysBody* flipperBody)
+    auto draw_flipper_with_texture = [this](PhysBody* flipperBody, bool isLeft)
         {
             if (!flipperBody || !flipperBody->body) return;
+            if (!flipperTexture.id) return;
 
             b2Body* body = flipperBody->body;
-            b2Fixture* fixture = body->GetFixtureList();
+            b2Vec2 pos = body->GetPosition();
+            float angle = body->GetAngle();
 
-            // Recorrer todas las fixtures (aunque solo debería haber una)
-            for (; fixture; fixture = fixture->GetNext())
+            // Convert position to screen coordinates
+            int x = (int)(METERS_TO_PIXELS * pos.x);
+            int y = (int)(SCREEN_HEIGHT - (METERS_TO_PIXELS * pos.y));
+
+            // Desired visual height will match the physics flipper height (preserves size)
+            float dstHeight = (float)flipperBody->height;
+            // Compute scale to preserve aspect ratio of the texture (no stretching)
+            float scale = dstHeight / (float)flipperTexture.height;
+            float dstWidth = (float)flipperTexture.width * scale;
+
+            Rectangle src = { 0, 0, (float)flipperTexture.width, (float)flipperTexture.height };
+            // Flip texture horizontally for right flipper by negating src.width
+            if (!isLeft)
             {
-                if (fixture->GetType() != b2Shape::e_polygon) continue;
-
-                b2PolygonShape* shape = (b2PolygonShape*)fixture->GetShape();
-                int vertexCount = shape->m_count; // Debería ser 4 para nuestra caja
-
-                if (vertexCount < 3) continue;
-
-                // Obtener los vértices de la hitbox en coordenadas del mundo (Box2D)
-                // Y convertirlos a coordenadas de pantalla (Raylib)
-                Vector2 screenVertices[b2_maxPolygonVertices];
-                int validVertices = 0;
-
-                for (int i = 0; i < vertexCount; ++i)
-                {
-                    // 1. Obtener vértice local
-                    b2Vec2 localPos = shape->m_vertices[i];
-                    // 2. Convertir a posición mundial
-                    b2Vec2 worldPos = body->GetWorldPoint(localPos);
-
-                    // 3. Convertir a píxeles de pantalla (Y-invertida)
-                    screenVertices[i].x = METERS_TO_PIXELS * worldPos.x;
-                    screenVertices[i].y = SCREEN_HEIGHT - (METERS_TO_PIXELS * worldPos.y);
-                    validVertices++;
-                }
-
-                if (validVertices == 4)
-                {
-                    // Dibujar el polígono relleno como dos triángulos (T1: 0,1,2 / T2: 0,2,3)
-                    DrawTriangle(screenVertices[0], screenVertices[1], screenVertices[2], WHITE);
-                    DrawTriangle(screenVertices[0], screenVertices[2], screenVertices[3], WHITE);
-                }
+                src.width = -src.width;
             }
+
+            // The Box2D flipper body is positioned at the pivot (one end of the flipper).
+            // The visual center must be offset from the pivot by half the flipper visual width.
+            float localOffsetX = (isLeft ? dstWidth * 0.5f : -dstWidth * 0.5f);
+            float ang_rad = angle; // body angle in radians
+            // Rotate local offset into world/screen space
+            float offsetX = localOffsetX * cosf(ang_rad) - 0.0f * sinf(ang_rad);
+            float offsetY = localOffsetX * sinf(ang_rad) + 0.0f * cosf(ang_rad);
+
+            // Compute visual center in screen coordinates (pivot is at x,y)
+            float centerX = (float)x + offsetX;
+            float centerY = (float)y + offsetY;
+
+            Rectangle dst = { centerX, centerY, dstWidth, dstHeight };
+            Vector2 origin = { dstWidth / 2.0f, dstHeight / 2.0f };
+            float rotation = angle * RADTODEG;
+
+            DrawTexturePro(flipperTexture, src, dst, origin, rotation, WHITE);
         };
 
     // Render left flipper
-    draw_flipper_hitbox(leftFlipper);
+    draw_flipper_with_texture(leftFlipper, true);
 
     // Render right flipper
-    draw_flipper_hitbox(rightFlipper);
+    draw_flipper_with_texture(rightFlipper, false);
     // =================================================================
-    // FIN DE LA SECCIÓN CORREGIDA
+    // END Flipper Rendering
     // =================================================================
 
     // Render ball
@@ -1329,7 +1384,7 @@ void ModuleGame::RenderPlayingState()
         }
     }
 
-    DrawText("Press P to Pause", SCREEN_WIDTH - 200, SCREEN_HEIGHT - 60, 16, LIGHTGRAY);
+    DrawTextEx(font, "Press P to Pause", { (float)(SCREEN_WIDTH - 200), (float)(SCREEN_HEIGHT - 60) }, 16, 1, LIGHTGRAY);
 }
 
 void ModuleGame::UpdatePausedState()
@@ -1398,22 +1453,22 @@ void ModuleGame::RenderGameOverState()
         ClearBackground(Color{ 30, 10, 10, 255 });
 
     const char* gameOverText = "GAME OVER";
-    int textWidth = MeasureText(gameOverText, 70);
-    DrawText(gameOverText, SCREEN_WIDTH / 2 - textWidth / 2, 150, 70, RED);
+    Vector2 textSize = MeasureTextEx(font, gameOverText, 70, 2);
+    DrawTextEx(font, gameOverText, { (float)(SCREEN_WIDTH / 2 - textSize.x / 2), 150.0f }, 70, 2, RED);
 
-    DrawText(TextFormat("Final Score: %d", gameData.previousScore),
-        SCREEN_WIDTH / 2 - 150, 280, 35, WHITE);
+    DrawTextEx(font, TextFormat("Final Score: %d", gameData.previousScore),
+        { (float)(SCREEN_WIDTH / 2 - 150), 280.0f }, 35, 1, WHITE);
 
     if (gameData.previousScore == gameData.highestScore && gameData.highestScore > 0)
     {
-        DrawText("NEW HIGH SCORE!", SCREEN_WIDTH / 2 - 150, 340, 30, GOLD);
+        DrawTextEx(font, "NEW HIGH SCORE!", { (float)(SCREEN_WIDTH / 2 - 150), 340.0f }, 30, 1, GOLD);
     }
 
-    DrawText(TextFormat("High Score: %d", gameData.highestScore),
-        SCREEN_WIDTH / 2 - 140, 380, 30, YELLOW);
+    DrawTextEx(font, TextFormat("High Score: %d", gameData.highestScore),
+        { (float)(SCREEN_WIDTH / 2 - 140), 380.0f }, 30, 1, YELLOW);
 
-    DrawText("Press M to Main Menu", SCREEN_WIDTH / 2 - 150, 450, 25, SKYBLUE);
-    DrawText("Press R to Restart", SCREEN_WIDTH / 2 - 150, 500, 25, GREEN);
+    DrawTextEx(font, "Press M to Main Menu", { (float)(SCREEN_WIDTH / 2 - 150), 450.0f }, 25, 1, SKYBLUE);
+    DrawTextEx(font, "Press R to Restart", { (float)(SCREEN_WIDTH / 2 - 150), 500.0f }, 25, 1, GREEN);
 }
 
 void ModuleGame::UpdateYouWinState()
@@ -1454,19 +1509,19 @@ void ModuleGame::RenderYouWinState()
         ClearBackground(Color{ 10, 30, 10, 255 });
 
     const char* youWinText = "YOU WIN!";
-    int textWidth = MeasureText(youWinText, 70);
-    DrawText(youWinText, SCREEN_WIDTH / 2 - textWidth / 2, 150, 70, GREEN);
+    Vector2 textSize = MeasureTextEx(font, youWinText, 70, 2);
+    DrawTextEx(font, youWinText, { (float)(SCREEN_WIDTH / 2 - textSize.x / 2), 150.0f }, 70, 2, GREEN);
 
-    DrawText(TextFormat("New High Score: %d", gameData.previousScore),
-        SCREEN_WIDTH / 2 - 180, 280, 35, GOLD);
+    DrawTextEx(font, TextFormat("New High Score: %d", gameData.previousScore),
+        { (float)(SCREEN_WIDTH / 2 - 180), 280.0f }, 35, 1, GOLD);
 
-    DrawText("CONGRATULATIONS!", SCREEN_WIDTH / 2 - 150, 340, 30, YELLOW);
+    DrawTextEx(font, "CONGRATULATIONS!", { (float)(SCREEN_WIDTH / 2 - 150), 340.0f }, 30, 1, YELLOW);
 
-    DrawText(TextFormat("Previous High Score: %d", gameData.highestScore),
-        SCREEN_WIDTH / 2 - 200, 380, 25, LIGHTGRAY);
+    DrawTextEx(font, TextFormat("Previous High Score: %d", gameData.highestScore),
+        { (float)(SCREEN_WIDTH / 2 - 200), 380.0f }, 25, 1, LIGHTGRAY);
 
-    DrawText("Press M to Main Menu", SCREEN_WIDTH / 2 - 150, 450, 25, SKYBLUE);
-    DrawText("Press R to Play Again", SCREEN_WIDTH / 2 - 150, 500, 25, GREEN);
+    DrawTextEx(font, "Press M to Main Menu", { (float)(SCREEN_WIDTH / 2 - 150), 450.0f }, 25, 1, SKYBLUE);
+    DrawTextEx(font, "Press R to Play Again", { (float)(SCREEN_WIDTH / 2 - 150), 500.0f }, 25, 1, GREEN);
 }
 
 void ModuleGame::LaunchBall()
@@ -1685,35 +1740,35 @@ void ModuleGame::CompleteStarCombo()
 void ModuleGame::DrawAudioSettings()
 {
     DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Color{ 0,0,0,200 });
-    DrawText("AUDIO SETTINGS", SCREEN_WIDTH / 2 - 150, 50, 30, WHITE);
-    DrawText("Press F2 to close", SCREEN_WIDTH / 2 - 100, 90, 16, GRAY);
+    DrawTextEx(font, "AUDIO SETTINGS", { (float)(SCREEN_WIDTH / 2 - 150), 50.0f }, 30, 1, WHITE);
+    DrawTextEx(font, "Press F2 to close", { (float)(SCREEN_WIDTH / 2 - 100), 90.0f }, 16, 1, GRAY);
 
     int startY = 150;
     int spacing = 80;
-    DrawText("Master Volume:", 100, startY, 20, WHITE);
-    DrawText(TextFormat("%.0f%%", App->audio->GetMasterVolume() * 100), 400, startY, 20, YELLOW);
+    DrawTextEx(font, "Master Volume:", { 100.0f, (float)startY }, 20, 1, WHITE);
+    DrawTextEx(font, TextFormat("%.0f%%", App->audio->GetMasterVolume() * 100), { 400.0f, (float)startY }, 20, 1, YELLOW);
     DrawRectangle(100, startY + 30, 400, 20, DARKGRAY);
     DrawRectangle(100, startY + 30, (int)(400 * App->audio->GetMasterVolume()), 20, GREEN);
-    DrawText("[1/2] Decrease/Increase", 520, startY + 5, 16, LIGHTGRAY);
+    DrawTextEx(font, "[1/2] Decrease/Increase", { 520.0f, (float)(startY + 5) }, 16, 1, LIGHTGRAY);
 
-    DrawText("Music Volume:", 100, startY + spacing, 20, WHITE);
-    DrawText(TextFormat("%.0f%%", App->audio->GetMusicVolume() * 100), 400, startY + spacing, 20, YELLOW);
+    DrawTextEx(font, "Music Volume:", { 100.0f, (float)(startY + spacing) }, 20, 1, WHITE);
+    DrawTextEx(font, TextFormat("%.0f%%", App->audio->GetMusicVolume() * 100), { 400.0f, (float)(startY + spacing) }, 20, 1, YELLOW);
     DrawRectangle(100, startY + spacing + 30, 400, 20, DARKGRAY);
     DrawRectangle(100, startY + spacing + 30, (int)(400 * App->audio->GetMusicVolume()), 20, BLUE);
-    DrawText("[3/4] Decrease/Increase", 520, startY + spacing + 5, 16, LIGHTGRAY);
+    DrawTextEx(font, "[3/4] Decrease/Increase", { 520.0f, (float)(startY + spacing + 5) }, 16, 1, LIGHTGRAY);
 
-    DrawText("SFX Volume:", 100, startY + spacing * 2, 20, WHITE);
-    DrawText(TextFormat("%.0f%%", App->audio->GetSFXVolume() * 100), 400, startY + spacing * 2, 20, YELLOW);
+    DrawTextEx(font, "SFX Volume:", { 100.0f, (float)(startY + spacing * 2) }, 20, 1, WHITE);
+    DrawTextEx(font, TextFormat("%.0f%%", App->audio->GetSFXVolume() * 100), { 400.0f, (float)(startY + spacing * 2) }, 20, 1, YELLOW);
     DrawRectangle(100, startY + spacing * 2 + 30, 400, 20, DARKGRAY);
     DrawRectangle(100, startY + spacing * 2 + 30, (int)(400 * App->audio->GetSFXVolume()), 20, RED);
-    DrawText("[5/6] Decrease/Increase", 520, startY + spacing * 2 + 5, 16, LIGHTGRAY);
+    DrawTextEx(font, "[5/6] Decrease/Increase", { 520.0f, (float)(startY + spacing * 2 + 5) }, 16, 1, LIGHTGRAY);
 
-    DrawText("Mute All: [M]", 100, startY + spacing * 3, 20, WHITE);
-    if (App->audio->GetMasterVolume() == 0.0f) DrawText("MUTED", 300, startY + spacing * 3, 20, RED);
-    else DrawText("ACTIVE", 300, startY + spacing * 3, 20, GREEN);
+    DrawTextEx(font, "Mute All: [M]", { 100.0f, (float)(startY + spacing * 3) }, 20, 1, WHITE);
+    if (App->audio->GetMasterVolume() == 0.0f) DrawTextEx(font, "MUTED", { 300.0f, (float)(startY + spacing * 3) }, 20, 1, RED);
+    else DrawTextEx(font, "ACTIVE", { 300.0f, (float)(startY + spacing * 3) }, 20, 1, GREEN);
 
-    DrawText("Press [S] to save settings", SCREEN_WIDTH / 2 - 120, SCREEN_HEIGHT - 80, 18, GREEN);
-    if (settingsSavedMessage) DrawText("Settings Saved!", SCREEN_WIDTH / 2 - 80, SCREEN_HEIGHT - 50, 20, LIME);
+    DrawTextEx(font, "Press [S] to save settings", { (float)(SCREEN_WIDTH / 2 - 120), (float)(SCREEN_HEIGHT - 80) }, 18, 1, GREEN);
+    if (settingsSavedMessage) DrawTextEx(font, "Settings Saved!", { (float)(SCREEN_WIDTH / 2 - 80), (float)(SCREEN_HEIGHT - 50) }, 20, 1, LIME);
 }
 
 void ModuleGame::UpdateAudioSettings()
@@ -1988,6 +2043,14 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
                     poly.x = offsetX;
                     poly.y = offsetY;
                     poly.rotation = rotation;
+
+                    // Set polygon type based on object name (e1/e2)
+                    if (nameTag && nameTag < objectEnd)
+                    {
+                        if (strncmp(nameTag + 6, "e1", 2) == 0) poly.type = 1;
+                        else if (strncmp(nameTag + 6, "e2", 2) == 0) poly.type = 2;
+                        else poly.type = 0;
+                    }
 
                     char* token = strtok(pointsStr, " ,");
                     while (token != NULL)

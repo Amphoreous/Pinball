@@ -45,6 +45,13 @@ public:
 	float GetMasterVolume() const { return masterVolume; }
 	float GetSFXVolume() const { return sfxVolume; }
 	float GetMusicVolume() const { return musicVolume; }
+
+	void PlayComboProgressSound(int progress, int total);
+	void PlayComboCompleteSequence();
+	void PlayExtraBallAward();
+	void PlayScoreMilestone(int score);
+
+
 private:
 
 	Music music;
@@ -59,10 +66,13 @@ private:
 	unsigned int bonusFx;
 	unsigned int comboCompleteFx;
 
-
 	// Volume settings
 	float masterVolume;
 	float sfxVolume;
 	float musicVolume;
+
+	float comboSequenceTimer;      
+	int comboSequenceStage;       
+	bool isPlayingComboSequence;
 
 };

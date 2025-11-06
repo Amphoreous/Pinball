@@ -462,6 +462,14 @@ void ModuleGame::AddScore(int points, const char* source)
     lastScoreIncrease = points * gameData.scoreMultiplier * gameData.comboMultiplier;
     scoreFlashActive = true;
     scoreFlashTimer = 0.0f;
+
+    int previousMilestone = (gameData.currentScore - lastScoreIncrease) / 5000;
+    int currentMilestone = gameData.currentScore / 5000;
+
+    if (currentMilestone > previousMilestone && gameData.currentScore >= 5000)
+    {
+        App->audio->PlayScoreMilestone(gameData.currentScore);
+    }
 }
 
 void ModuleGame::ResetScoreMultipliers()
@@ -1329,6 +1337,8 @@ void ModuleGame::AddComboLetter(char letter)
         if (letterCollectSfx >= 0) {
             App->audio->PlayFx(letterCollectSfx);
         }
+
+        App->audio->PlayComboProgressSound(gameData.comboProgress, 4);
         AddScore(TARGET_COMBO_LETTER, "Combo Letter");
 
         if (gameData.comboProgress >= 4)
@@ -1421,6 +1431,8 @@ void ModuleGame::CompleteStarCombo()
     if (specialHitSfx >= 0) {
         App->audio->PlayFx(specialHitSfx);
     }
+    App->audio->PlayComboCompleteSequence();
+    App->audio->PlayExtraBallAward();
 
     comboCompleteEffect = true;
     comboCompleteTimer = 0.0f;

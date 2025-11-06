@@ -20,6 +20,10 @@ ModuleAudio::ModuleAudio(Application* app, bool start_enabled) : Module(app, sta
 	masterVolume = 1.0f;
 	sfxVolume = 1.0f;
 	musicVolume = 0.5f;
+
+	comboSequenceTimer = 0.0f;
+	comboSequenceStage = 0;
+	isPlayingComboSequence = false;
 }
 
 // Destructor
@@ -53,6 +57,33 @@ update_status ModuleAudio::Update()
 	if (IsMusicValid(music))
 	{
 		UpdateMusicStream(music);
+	}
+
+	if (isPlayingComboSequence)
+	{
+		float dt = GetFrameTime();
+		comboSequenceTimer += dt;
+
+		float stageInterval = 0.15f;
+		int targetStage = (int)(comboSequenceTimer / stageInterval);
+
+		if (targetStage > comboSequenceStage && comboSequenceStage < 4)
+		{
+			comboSequenceStage++;
+
+			float pitch = 1.0f + (comboSequenceStage * 0.25f);
+			float volume = 0.7f + (comboSequenceStage * 0.075f); 
+
+			PlayFxWithPitch(bonusFx, pitch);
+
+			if (comboSequenceStage >= 4)
+			{
+				PlayFx(comboCompleteFx);
+				isPlayingComboSequence = false;
+				comboSequenceTimer = 0.0f;
+				comboSequenceStage = 0;
+			}
+		}
 	}
 
 	return UPDATE_CONTINUE;
@@ -103,8 +134,6 @@ bool ModuleAudio::PlayMusic(const char* path, float fade_time)
 		LOG("Failed to load music: %s", path);
 		ret = false;
 	}
-
-	LOG("Successfully playing %s", path);
 
 	return ret;
 }
@@ -255,5 +284,61 @@ void ModuleAudio::SetMusicVolume(float volume)
 	if (IsMusicValid(music))
 	{
 		::SetMusicVolume(music, musicVolume * masterVolume);
+	}
+}
+
+void ModuleAudio::PlayComboProgressSound(int progress, int total)
+{
+	if (progress <= 0 || total <= 0)
+		return;
+
+	float progressRatio = (float)progress / (float)total;
+	float pitch = 1.0f + (progressRatio * 0.4f); 
+
+	LOG("TAREA 4: Playing combo progress sound - Progress: %d/%d, Pitch: %.2f", progress, total, pitch);
+
+	PlayFxWithPitch(bonusFx, pitch);
+}
+
+void ModuleAudio::PlayComboCompleteSequence()
+{
+
+	isPlayingComboSequence = true;
+	comboSequenceTimer = 0.0f;
+	comboSequenceStage = 0;
+
+	PlayFxWithPitch(bonusFx, 1.0f);
+}
+
+void ModuleAudio::PlayExtraBallAward()
+{
+
+	PlayFxWithPitch(comboCompleteFx, 1.3f);
+	PlayFxWithPitch(bonusFx, 0.8f);
+}
+
+void ModuleAudio::PlayScoreMilestone(int score)
+{
+
+	if (score >= 100000)
+	{
+		// Hit muy alto
+		PlayFxWithPitch(comboCompleteFx, 1.5f);
+		PlayFxWithVolume(bonusFx, 1.0f);
+	}
+	else if (score >= 50000)
+	{
+		// Hit alto
+		PlayFxWithPitch(comboCompleteFx, 1.2f);
+	}
+	else if (score >= 10000)
+	{
+		// Hit medio
+		PlayFxWithPitch(bonusFx, 1.3f);
+	}
+	else if (score >= 5000)
+	{
+		// Hit bajo
+		PlayFxWithPitch(bonusFx, 1.1f);
 	}
 }

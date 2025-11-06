@@ -121,6 +121,7 @@ public:
     Texture2D letterTTexture = { 0 };
     Texture2D letterATexture = { 0 };
     Texture2D letterRTexture = { 0 };
+    Texture2D spaceshipTexture = { 0 };
 
     Texture2D titleTexture = { 0 };
 
@@ -135,8 +136,8 @@ public:
     bool ballLaunched = false;
     float kickerForce = 0.0f;
     float kickerChargeTime = 0.0f;
-    const float MAX_KICKER_FORCE = 80.0f;      // Increased from 45.0f for more power
-    const float KICKER_CHARGE_SPEED = 50.0f;   // Increased from 30.0f for faster charging
+    const float MAX_KICKER_FORCE = 80.0f;
+    const float KICKER_CHARGE_SPEED = 50.0f;
 
     int bumperHitSfx = -1;
     int launchSfx = -1;
@@ -169,5 +170,5 @@ public:
     bool comboCompleteEffect = false;
     float comboCompleteTimer = 0.0f;
     int comboCompleteFlashCount = 0;
-    Color comboCompleteFlashColor;
+    Color comboCompleteFlashColor = YELLOW;
 };

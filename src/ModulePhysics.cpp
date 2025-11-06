@@ -11,6 +11,9 @@
 ModulePhysics::ModulePhysics(Application* app, bool start_enabled) : Module(app, start_enabled)
 {
 	debug = false;
+	world = nullptr;
+	mouse_joint = nullptr;
+	ground = nullptr;
 }
 
 // Destructor
@@ -21,16 +24,14 @@ ModulePhysics::~ModulePhysics()
 bool ModulePhysics::Start()
 {
 	LOG("Creating Physics 2D environment");
-	
-	// Create Box2D world with gravity
-	b2Vec2 gravity(0.0f, -10.0f); // Gravity pointing down (in Box2D, +Y is up)
+
+	b2Vec2 gravity(0.0f, -10.0f);
 	world = new b2World(gravity);
 	world->SetContactListener(this);
-	
-	// Create ground body for mouse joint
+
 	b2BodyDef bd;
 	ground = world->CreateBody(&bd);
-	
+
 	return true;
 }
 

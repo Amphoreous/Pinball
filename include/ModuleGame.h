@@ -135,8 +135,8 @@ public:
     bool ballLaunched = false;
     float kickerForce = 0.0f;
     float kickerChargeTime = 0.0f;
-    const float MAX_KICKER_FORCE = 45.0f;
-    const float KICKER_CHARGE_SPEED = 30.0f;
+    const float MAX_KICKER_FORCE = 80.0f;      // Increased from 45.0f for more power
+    const float KICKER_CHARGE_SPEED = 50.0f;   // Increased from 30.0f for faster charging
 
     int bumperHitSfx = -1;
     int launchSfx = -1;

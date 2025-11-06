@@ -62,6 +62,9 @@ ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start
     currentBlackHoleIndex = -1;
     blackHoleDwellTime = 0.0f;
 
+    // Spawn point safety eject
+    spawnZoneDwellTime = 0.0f;
+
     ballSavedPosX = 0.0f;
     ballSavedPosY = 0.0f;
     ballSavedVelX = 0.0f;
@@ -775,8 +778,7 @@ void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
                 {
                     App->audio->PlayBumperHit(impactForce);
                 }
-
-                AddScore(TARGET_BUMPER, "Special Bumper");
+                // No score for e1/e2 (special polygons)
             }
             break;
         }
@@ -805,7 +807,7 @@ void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
             {
                 App->audio->PlayBonusSound();
             }
-            AddScore(100, "Target");
+            // Removed score - only bumpers and black holes give points
             break;
         }
 
@@ -815,7 +817,7 @@ void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
             {
                 App->audio->PlayBonusSound();
             }
-            AddScore(TARGET_SPECIAL, "Special Target");
+            // Removed score - only bumpers and black holes give points
             break;
         }
 
@@ -841,14 +843,14 @@ void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
         case COLLISION_FLIPPER:
         {
             App->audio->PlayFlipperHit(impactForce);
-            AddScore(TARGET_FLIPPER, "Flipper");
+            // Removed score - only bumpers and black holes give points
             break;
         }
 
         case COLLISION_WALL:
         {
             App->audio->PlayBumperHit(impactForce * 0.5f);
-            AddScore(TARGET_WALL, "Wall");
+            // Removed score - only bumpers and black holes give points
             break;
         }
 
@@ -900,12 +902,12 @@ void ModuleGame::RenderMenuState()
 
     if (titleTexture.id)
     {
-        float scale = 0.25f;
-        int titleWidth = (int)(titleTexture.width * scale);
-        int titleHeight = (int)(titleTexture.height * scale);
-        int titleX = screenCenterX - titleWidth / 2;
+    float scale = 0.5f;
+    int titleWidth = (int)(titleTexture.width * scale);
+    int titleHeight = (int)(titleTexture.height * scale);
+    int titleX = screenCenterX - titleWidth / 2;
 
-        DrawTextureEx(titleTexture, Vector2{ (float)titleX, (float)titleY }, 0.0f, scale, WHITE);
+    DrawTextureEx(titleTexture, Vector2{ (float)titleX, (float)titleY }, 0.0f, scale, WHITE);
     }
     else
     {
@@ -931,6 +933,67 @@ void ModuleGame::UpdatePlayingState()
 {
     ApplyBlackHoleForces(GetFrameTime());
     UpdateMovingTargets(GetFrameTime());
+
+        // Ball stuck velocity eject logic (anywhere on playfield)
+        static float ballZeroVelTime = 0.0f;
+        if (ball && ball->body && ballLaunched) {
+            b2Vec2 ballVel = ball->body->GetLinearVelocity();
+            if (ballVel.Length() < 0.01f) {
+                ballZeroVelTime += GetFrameTime();
+                if (ballZeroVelTime >= 5.0f) {
+                    float ejectAngle = GetRandomValue(180, 270) * DEGTORAD;
+                    float ejectForce = 15.0f;
+                    b2Vec2 ejectImpulse(cosf(ejectAngle) * ejectForce, sinf(ejectAngle) * ejectForce);
+                    ball->body->ApplyLinearImpulseToCenter(ejectImpulse, true);
+                    LOG("Auto-ejected ball after 5s at 0 m/s");
+                    ballZeroVelTime = 0.0f;
+                    if (specialHitSfx >= 0) {
+                        App->audio->PlayFx(specialHitSfx);
+                    }
+                }
+            } else {
+                ballZeroVelTime = 0.0f;
+            }
+        } else {
+            ballZeroVelTime = 0.0f;
+        }
+    // Check if ball is stuck in spawn zone and needs auto-eject
+    if (ball && ball->body && ballLaunched)
+    {
+        const b2Vec2 SPAWN_POSITION(2.0f, 8.7f); // spawn point in Box2D coords
+        
+        b2Vec2 ballPos = ball->body->GetPosition();
+        b2Vec2 diff = ballPos - SPAWN_POSITION;
+        float distToSpawn = diff.Length();
+
+        if (distToSpawn < SPAWN_ZONE_RADIUS)
+        {
+            // Ball is in spawn zone
+            spawnZoneDwellTime += GetFrameTime();
+
+            if (spawnZoneDwellTime >= SPAWN_EJECT_THRESHOLD_TIME)
+            {
+                // Auto-eject: give ball a strong push away from spawn
+                float ejectAngle = GetRandomValue(180, 270) * DEGTORAD; // Push down-left or down-right
+                float ejectForce = 15.0f;
+                b2Vec2 ejectImpulse(cosf(ejectAngle) * ejectForce, sinf(ejectAngle) * ejectForce);
+                ball->body->ApplyLinearImpulseToCenter(ejectImpulse, true);
+
+                LOG("Auto-ejected ball from spawn zone after %.1fs", spawnZoneDwellTime);
+                spawnZoneDwellTime = 0.0f;
+
+                if (specialHitSfx >= 0)
+                {
+                    App->audio->PlayFx(specialHitSfx);
+                }
+            }
+        }
+        else
+        {
+            // Ball left spawn zone - reset timer
+            spawnZoneDwellTime = 0.0f;
+        }
+    }
 
     if (IsKeyPressed(KEY_P))
     {
@@ -1345,8 +1408,9 @@ void ModuleGame::RenderPlayingState()
             int x = (int)(METERS_TO_PIXELS * pos.x);
             int y = (int)(SCREEN_HEIGHT - (METERS_TO_PIXELS * pos.y));
 
-            // Desired visual height will match the physics flipper height (preserves size)
-            float dstHeight = (float)flipperBody->height;
+            // Desired visual height - increased by 2.0x for better visibility
+            float visualScale = 2.0f;
+            float dstHeight = (float)flipperBody->height * visualScale;
             // Compute scale to preserve aspect ratio of the texture (no stretching)
             float scale = dstHeight / (float)flipperTexture.height;
             float dstWidth = (float)flipperTexture.width * scale;
@@ -1560,6 +1624,7 @@ void ModuleGame::LaunchBall()
     ballLaunched = true;
     kickerChargeTime = 0.0f;
     kickerForce = 0.0f;
+    spawnZoneDwellTime = 0.0f; // Reset spawn zone timer on launch
 
     if (launchSfx >= 0) App->audio->PlayFx(launchSfx);
 }
@@ -1580,6 +1645,7 @@ void ModuleGame::RespawnBall()
     ball->body->SetEnabled(true);
 
     ballLaunched = false;
+    spawnZoneDwellTime = 0.0f; // Reset spawn zone timer on respawn
     ResetScoreMultipliers();
 
     LOG("Ball respawned successfully");
@@ -2280,6 +2346,14 @@ void ModuleGame::ApplyBlackHoleForces(float dt)
     float ballSpeed = ballVel.Length();
     float ballMass = ball->body->GetMass();
 
+    // Update teleport cooldown
+    if (teleportCooldown > 0.0f)
+    {
+        teleportCooldown -= dt;
+        if (teleportCooldown < 0.0f)
+            teleportCooldown = 0.0f;
+    }
+
     int closestBHIndex = -1;
     float closestDistSq = FLT_MAX;
 
@@ -2298,15 +2372,17 @@ void ModuleGame::ApplyBlackHoleForces(float dt)
         }
     }
 
-    const float BLACK_HOLE_RADIUS_SQ = 2.5f * 2.5f; // Increased from 1.5 to 2.5 meters squared
-    const float SLOW_SPEED_THRESHOLD = 3.5f; // Increased from 2.0 to 3.5 m/s
+    const float BLACK_HOLE_TRAP_RADIUS_SQ = 1.2f * 1.2f; // Core trap zone - accumulate time when here (increased from 0.8)
+    const float BLACK_HOLE_INFLUENCE_RADIUS_SQ = 2.0f * 2.0f; // Influence zone - don't reset timer (increased from 1.5)
+    const float SLOW_SPEED_THRESHOLD = 2.0f; // Speed threshold for trapping (increased from 1.5 to be more forgiving)
 
     // Check if ball is inside a black hole and moving slowly (trapped)
-    if (closestBHIndex >= 0 && closestDistSq < BLACK_HOLE_RADIUS_SQ && ballSpeed < SLOW_SPEED_THRESHOLD)
+    // Don't trap if in cooldown period after recent teleportation
+    if (teleportCooldown <= 0.0f && closestBHIndex >= 0 && closestDistSq < BLACK_HOLE_TRAP_RADIUS_SQ && ballSpeed < SLOW_SPEED_THRESHOLD)
     {
         if (currentBlackHoleIndex == closestBHIndex)
         {
-            // Still in the same black hole - accumulate dwell time
+            // Still in the same black hole trap zone - accumulate dwell time
             blackHoleDwellTime += dt;
 
             static float lastLogTime = 0.0f;
@@ -2334,11 +2410,79 @@ void ModuleGame::ApplyBlackHoleForces(float dt)
                     PhysBody* targetBH = blackHoles[targetBHIndex];
                     b2Vec2 targetPos = targetBH->body->GetPosition();
 
+                    // Calculate map boundaries in Box2D coordinates (meters)
+                    const float MAP_MIN_X = 0.5f; // 0.5 meter margin from left edge
+                    const float MAP_MAX_X = (SCREEN_WIDTH * PIXELS_TO_METERS) - 0.5f; // 0.5 meter margin from right edge
+                    const float MAP_MIN_Y = 0.5f; // 0.5 meter margin from top
+                    const float MAP_MAX_Y = (SCREEN_HEIGHT * PIXELS_TO_METERS) - 0.5f; // 0.5 meter margin from bottom
+
+                    // Helper class to check if a position overlaps with collision objects
+                    class TeleportCollisionCallback : public b2QueryCallback
+                    {
+                    public:
+                        bool foundCollision;
+                        PhysBody* ballBody;
+                        std::vector<PhysBody*>* blackHolesToIgnore;
+
+                        TeleportCollisionCallback(PhysBody* ball, std::vector<PhysBody*>* bhList) 
+                            : foundCollision(false), ballBody(ball), blackHolesToIgnore(bhList) {}
+
+                        bool ReportFixture(b2Fixture* fixture) override
+                        {
+                            PhysBody* pb = (PhysBody*)fixture->GetBody()->GetUserData().pointer;
+                            
+                            // Ignore the ball itself and black holes (sensors)
+                            if (pb == ballBody || fixture->IsSensor())
+                                return true;
+                            
+                            // Found a solid collision object at this position
+                            foundCollision = true;
+                            return false; // Stop searching
+                        }
+                    };
+
                     // Teleport ball to the target black hole with slight offset to avoid re-trapping
-                    float offsetAngle = GetRandomValue(0, 360) * DEGTORAD;
-                    float offsetDist = 0.8f; // meters - spawn outside the trap zone
-                    b2Vec2 offset(cosf(offsetAngle) * offsetDist, sinf(offsetAngle) * offsetDist);
-                    ball->body->SetTransform(targetPos + offset, ball->body->GetAngle());
+                    // Try multiple times to find a valid position within map bounds and without collisions
+                    b2Vec2 finalPos = targetPos;
+                    bool foundValidPos = false;
+                    
+                    for (int attempt = 0; attempt < 40 && !foundValidPos; attempt++)
+                    {
+                        float offsetAngle = GetRandomValue(0, 360) * DEGTORAD;
+                        float offsetDist = 1.5f; // meters - spawn well outside the trap zone (increased from 0.8)
+                        b2Vec2 offset(cosf(offsetAngle) * offsetDist, sinf(offsetAngle) * offsetDist);
+                        b2Vec2 testPos = targetPos + offset;
+
+                        // Check if position is within map boundaries
+                        if (testPos.x >= MAP_MIN_X && testPos.x <= MAP_MAX_X &&
+                            testPos.y >= MAP_MIN_Y && testPos.y <= MAP_MAX_Y)
+                        {
+                            // Check if position overlaps with any collision objects
+                            const float BALL_RADIUS = 0.25f; // Ball radius in meters (approximate)
+                            b2AABB aabb;
+                            aabb.lowerBound = b2Vec2(testPos.x - BALL_RADIUS, testPos.y - BALL_RADIUS);
+                            aabb.upperBound = b2Vec2(testPos.x + BALL_RADIUS, testPos.y + BALL_RADIUS);
+
+                            TeleportCollisionCallback callback(ball, &blackHoles);
+                            b2World* world = App->physics->GetWorld();
+                            world->QueryAABB(&callback, aabb);
+
+                            if (!callback.foundCollision)
+                            {
+                                finalPos = testPos;
+                                foundValidPos = true;
+                            }
+                        }
+                    }
+
+                    // If no valid offset found, just use the black hole center (should always be valid)
+                    if (!foundValidPos)
+                    {
+                        finalPos = targetPos;
+                        LOG("Warning: Could not find valid teleport offset, using black hole center");
+                    }
+
+                    ball->body->SetTransform(finalPos, ball->body->GetAngle());
 
                     // Give a stronger random velocity to eject from the black hole
                     float angle = GetRandomValue(0, 360) * DEGTORAD;
@@ -2348,6 +2492,9 @@ void ModuleGame::ApplyBlackHoleForces(float dt)
 
                     LOG("BLACK HOLE TELEPORT! %d -> %d (ejection speed: %.2f m/s)", closestBHIndex, targetBHIndex, ejectSpeed);
                     AddScore(500, "Black Hole Teleport");
+
+                    // Activate cooldown to prevent immediate re-trapping
+                    teleportCooldown = TELEPORT_COOLDOWN_TIME;
 
                     // Play special sound if available
                     if (specialHitSfx >= 0)
@@ -2366,15 +2513,20 @@ void ModuleGame::ApplyBlackHoleForces(float dt)
             // Entered a new black hole
             currentBlackHoleIndex = closestBHIndex;
             blackHoleDwellTime = 0.0f;
-            LOG("Entering black hole %d (speed: %.2f m/s)", closestBHIndex, ballSpeed);
+            // Removed verbose log - only log when actually teleporting
         }
+    }
+    else if (closestBHIndex >= 0 && closestDistSq < BLACK_HOLE_INFLUENCE_RADIUS_SQ && currentBlackHoleIndex == closestBHIndex)
+    {
+        // Ball is still near the same black hole but outside trap zone or moving fast
+        // Slowly decay the timer instead of immediate reset
+        blackHoleDwellTime -= dt * 0.5f; // Decay at half speed
+        if (blackHoleDwellTime < 0.0f)
+            blackHoleDwellTime = 0.0f;
     }
     else
     {
-        // Ball is not in a black hole or moving too fast - reset tracking
-        if (currentBlackHoleIndex >= 0) {
-            LOG("Left black hole %d (speed: %.2f m/s, dist: %.2f)", currentBlackHoleIndex, ballSpeed, sqrtf(closestDistSq));
-        }
+        // Ball is far from any black hole or switched to different one - reset tracking
         currentBlackHoleIndex = -1;
         blackHoleDwellTime = 0.0f;
     }

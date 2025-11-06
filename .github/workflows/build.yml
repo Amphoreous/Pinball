@@ -151,7 +151,7 @@ jobs:
                 "Right Arrow", 
                 "Down Arrow",
                 "F1",
-                "Pokemon Pinball",
+                "Space Pinball",
                 "github.com/Amphoreous/Pinball"
             )
             
@@ -204,9 +204,9 @@ jobs:
       with:
         files: GinerSofia_HamdaouiZakaria_MartinezJoel_MedinaMontserrat_PladellorensMarc_v${{ github.event.inputs.version }}.zip
         tag_name: v${{ github.event.inputs.version }}
-        name: Pokemon Pinball Clone - Release v${{ github.event.inputs.version }}
+        name: Space Pinball - Release v${{ github.event.inputs.version }}
         body: |
-          # Pokemon Pinball Clone - Release v${{ github.event.inputs.version }}
+          # Space Pinball - Release v${{ github.event.inputs.version }}
           
           **Game Development Course Final Project**
           
@@ -223,7 +223,7 @@ jobs:
           - **Kicker mechanism** (Down arrow key)  
           - **Comprehensive scoring system** (Current/Previous/Highest)
           - **Ball management** with 3 balls per round
-          - **POKEMON combo system** for bonus points and extra balls
+          - **STAR combo system** for bonus points and extra balls
           - **Complete audio system** with hit sounds and bonuses
           - **F1 Debug mode** with physics shape visualization
           - **Mouse joint debugging** for physics testing
@@ -246,7 +246,7 @@ jobs:
           - ✅ **Audio effects** for hits, bonuses, and combos
           - ✅ **Scoring system** tracks current, previous, and highest scores
           - ✅ **Ball management** with specific count per round (3 balls)
-          - ✅ **Combo system** - POKEMON letter collection for bonuses
+          - ✅ **Combo system** - STAR letter collection for bonuses
           - ✅ **Clear game states** with proper begin/end screens
           - ✅ **No memory leaks** verified with testing tools
           
@@ -254,21 +254,18 @@ jobs:
           - **Pinball.exe** - Main game executable (Release build, 60 FPS)
           - **Assets folder** - All sprites, audio, and UI elements
           - **README.md** - Complete documentation and team information
-          - **Required DLLs** - raylib and Box2D dependencies
-          
+          - **LICENSE** - Project licensing information
+
           ## 🔧 Technical Implementation
           - Built with **raylib** for graphics and audio
           - **Box2D** physics engine for realistic pinball simulation  
           - **premake5** build system from raylib-box2d-quickstart template
           - **Visual Studio 2022** Release configuration
           - **Cross-platform** code structure (Windows/Linux/macOS)
-          
-          ## 🎨 Inspiration
-          Inspired by **Pokemon Pinball - Ruby & Sapphire** for Game Boy Advance
-          
+                    
           ## 📊 Development Stats
           - **38 GitHub issues** completed across all team members
-          - **32 days** of development (September 28 - October 30, 2025)
+          - **40 days** of development (September 28 - November 6, 2025)
           - **5 specialized team roles** with clear responsibilities
           - **Multiple build configurations** tested and verified
           
@@ -282,7 +279,7 @@ jobs:
           
           **Repository**: https://github.com/Amphoreous/Pinball
           **Original Template**: https://github.com/TheUnrealZaka/raylib-box2d-quickstart
-          **Submission Date**: October 30, 2025
+          **Submission Date**: November 6, 2025
           
         prerelease: ${{ github.event.inputs.isPrerelease }}
         generate_release_notes: true

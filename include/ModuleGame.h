@@ -188,8 +188,15 @@ public:
     // Black hole teleportation tracking
     int currentBlackHoleIndex = -1;
     float blackHoleDwellTime = 0.0f;
-    const float TELEPORT_THRESHOLD_TIME = 1.5f;  // seconds to be trapped before teleport
+    float teleportCooldown = 0.0f; // Cooldown timer after teleportation
+    const float TELEPORT_THRESHOLD_TIME = 0.3f;  // seconds to be trapped before teleport (reduced from 0.5 for quicker response)
     const float TELEPORT_SPEED_THRESHOLD = 2.0f; // max speed (m/s) to be considered trapped
+    const float TELEPORT_COOLDOWN_TIME = 2.0f; // seconds of immunity after teleporting
+
+    // Spawn point safety eject
+    float spawnZoneDwellTime = 0.0f;
+    const float SPAWN_EJECT_THRESHOLD_TIME = 3.0f; // seconds before auto-eject
+    const float SPAWN_ZONE_RADIUS = 1.0f; // meters
 
     float ballSavedPosX = 0.0f, ballSavedPosY = 0.0f;
     float ballSavedVelX = 0.0f, ballSavedVelY = 0.0f;

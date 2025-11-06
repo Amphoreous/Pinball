@@ -185,6 +185,12 @@ public:
     float starLetterSpawnTimer = 0.0f;
     const float STAR_LETTER_SPAWN_INTERVAL = 5.0f;
 
+    // Black hole teleportation tracking
+    int currentBlackHoleIndex = -1;
+    float blackHoleDwellTime = 0.0f;
+    const float TELEPORT_THRESHOLD_TIME = 1.5f;  // seconds to be trapped before teleport
+    const float TELEPORT_SPEED_THRESHOLD = 2.0f; // max speed (m/s) to be considered trapped
+
     float ballSavedPosX = 0.0f, ballSavedPosY = 0.0f;
     float ballSavedVelX = 0.0f, ballSavedVelY = 0.0f;
     float ballSavedAngularVel = 0.0f;

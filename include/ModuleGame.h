@@ -129,6 +129,7 @@ public:
     Texture2D letterTTexture = { 0 };
     Texture2D letterATexture = { 0 };
     Texture2D letterRTexture = { 0 };
+    Texture2D spaceshipTexture = { 0 };
 
     Texture2D titleTexture = { 0 };
 
@@ -178,5 +179,5 @@ public:
     bool comboCompleteEffect = false;
     float comboCompleteTimer = 0.0f;
     int comboCompleteFlashCount = 0;
-    Color comboCompleteFlashColor;
+    Color comboCompleteFlashColor = YELLOW;
 };

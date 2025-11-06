@@ -4,22 +4,22 @@
 #include "PhysBody.h"
 #include "raylib.h"
 
-// Función helper para filtrar vértices muy cercanos
+// Funciï¿½n helper para filtrar vï¿½rtices muy cercanos
 std::vector<b2Vec2> FilterCloseVertices(b2Vec2* vertices, int count, float minDistance = 0.05f)
 {
 	std::vector<b2Vec2> filteredVertices;
 
 	if (count <= 0) return filteredVertices;
 
-	// Siempre agregar el primer vértice
+	// Siempre agregar el primer vï¿½rtice
 	filteredVertices.push_back(vertices[0]);
 
-	// Filtrar vértices subsecuentes que estén muy cerca
+	// Filtrar vï¿½rtices subsecuentes que estï¿½n muy cerca
 	for (int i = 1; i < count; ++i)
 	{
 		bool tooClose = false;
 
-		// Verificar distancia con todos los vértices ya agregados
+		// Verificar distancia con todos los vï¿½rtices ya agregados
 		for (const auto& existing : filteredVertices)
 		{
 			float distSq = b2DistanceSquared(vertices[i], existing);
@@ -45,6 +45,9 @@ ModulePhysics::ModulePhysics(Application* app, bool start_enabled) : Module(app,
 	world = NULL;
 	mouseJoint = NULL;
 	debug = false;
+	world = nullptr;
+	mouse_joint = nullptr;
+	ground = nullptr;
 }
 
 ModulePhysics::~ModulePhysics()
@@ -55,8 +58,7 @@ bool ModulePhysics::Start()
 {
 	LOG("Creating Physics 2D environment");
 
-	// **CORRECCIÓN: Mantener GRAVITY_Y sin invertir para que la pelota caiga hacia abajo**
-	b2Vec2 gravity(GRAVITY_X, GRAVITY_Y); // Sin el signo negativo
+	b2Vec2 gravity(0.0f, -10.0f);
 	world = new b2World(gravity);
 
 	if (!world)
@@ -67,19 +69,11 @@ bool ModulePhysics::Start()
 
 	world->SetContactListener(this);
 
-	// Crear el ground body (muy importante para mouse joints)
 	b2BodyDef bd;
 	bd.type = b2_staticBody;
 	bd.position.Set(0.0f, 0.0f);
 	ground = world->CreateBody(&bd);
 
-	if (!ground)
-	{
-		LOG("ERROR: Failed to create ground body");
-		return false;
-	}
-
-	LOG("Physics world created successfully");
 	return true;
 }
 
@@ -90,12 +84,12 @@ update_status ModulePhysics::PreUpdate()
 	float dt = GetFrameTime();
 
 	// Validar dt para evitar problemas
-	if (dt <= 0.0f || dt > 0.033f) // Máximo 30fps
+	if (dt <= 0.0f || dt > 0.033f) // Mï¿½ximo 30fps
 	{
 		dt = 0.016f; // 60fps por defecto
 	}
 
-	// Step del mundo con parámetros más conservadores
+	// Step del mundo con parï¿½metros mï¿½s conservadores
 	world->Step(dt, 6, 2);
 
 	// Limpiar bodies marcados para destruir
@@ -131,7 +125,7 @@ PhysBody* ModulePhysics::CreateCircle(int x, int y, int radius, b2BodyType type)
 
 	// **CLAVE: Invertir Y para que coincida con el sistema de Box2D**
 	float posX = PIXELS_TO_METERS * x;
-	float posY = PIXELS_TO_METERS * (SCREEN_HEIGHT - y); // Inversión de Y
+	float posY = PIXELS_TO_METERS * (SCREEN_HEIGHT - y); // Inversiï¿½n de Y
 
 	if (!b2Vec2(posX, posY).IsValid())
 	{
@@ -200,7 +194,7 @@ PhysBody* ModulePhysics::CreateRectangle(int x, int y, int width, int height, b2
 
 	// **CLAVE: Invertir Y para que coincida con el sistema de Box2D**
 	float posX = PIXELS_TO_METERS * x;
-	float posY = PIXELS_TO_METERS * (SCREEN_HEIGHT - y); // Inversión de Y
+	float posY = PIXELS_TO_METERS * (SCREEN_HEIGHT - y); // Inversiï¿½n de Y
 
 	if (!b2Vec2(posX, posY).IsValid())
 	{
@@ -272,7 +266,7 @@ PhysBody* ModulePhysics::CreateRectangleSensor(int x, int y, int width, int heig
 
 	// **CLAVE: Invertir Y para que coincida con el sistema de Box2D**
 	float posX = PIXELS_TO_METERS * x;
-	float posY = PIXELS_TO_METERS * (SCREEN_HEIGHT - y); // Inversión de Y
+	float posY = PIXELS_TO_METERS * (SCREEN_HEIGHT - y); // Inversiï¿½n de Y
 
 	if (!b2Vec2(posX, posY).IsValid())
 	{
@@ -332,7 +326,7 @@ PhysBody* ModulePhysics::CreateChain(int x, int y, int* points, int point_count,
 		return nullptr;
 	}
 
-	if (!points || point_count < 4) // Mínimo 2 puntos (4 valores)
+	if (!points || point_count < 4) // Mï¿½nimo 2 puntos (4 valores)
 	{
 		LOG("ERROR: Invalid points or point_count in CreateChain: %d", point_count);
 		return nullptr;
@@ -343,7 +337,7 @@ PhysBody* ModulePhysics::CreateChain(int x, int y, int* points, int point_count,
 
 	// **CLAVE: Invertir Y para que coincida con el sistema de Box2D**
 	float posX = PIXELS_TO_METERS * x;
-	float posY = PIXELS_TO_METERS * (SCREEN_HEIGHT - y); // Inversión de Y
+	float posY = PIXELS_TO_METERS * (SCREEN_HEIGHT - y); // Inversiï¿½n de Y
 
 	if (!b2Vec2(posX, posY).IsValid())
 	{
@@ -393,11 +387,11 @@ PhysBody* ModulePhysics::CreateChain(int x, int y, int* points, int point_count,
 
 	b2ChainShape chain;
 
-	// Calculamos los vértices fantasma prev/next
+	// Calculamos los vï¿½rtices fantasma prev/next
 	b2Vec2 prevVertex = filteredVertices[0] + (filteredVertices[0] - filteredVertices[1]);
 	b2Vec2 nextVertex = filteredVertices.back() + (filteredVertices.back() - filteredVertices[filteredVertices.size() - 2]);
 
-	// Usar los vértices filtrados y los vértices fantasma
+	// Usar los vï¿½rtices filtrados y los vï¿½rtices fantasma
 	chain.CreateChain(filteredVertices.data(), (int)filteredVertices.size(), prevVertex, nextVertex);
 
 	b2FixtureDef fixture;
@@ -428,7 +422,7 @@ PhysBody* ModulePhysics::CreatePolygonLoop(int x, int y, int* points, int point_
 		return nullptr;
 	}
 
-	if (!points || point_count < 6) // Mínimo 3 puntos (6 valores)
+	if (!points || point_count < 6) // Mï¿½nimo 3 puntos (6 valores)
 	{
 		LOG("ERROR: Invalid points or point_count in CreatePolygonLoop: %d", point_count);
 		return nullptr;
@@ -446,7 +440,7 @@ PhysBody* ModulePhysics::CreatePolygonLoop(int x, int y, int* points, int point_
 
 	// **CLAVE: Invertir Y para que coincida con el sistema de Box2D**
 	float posX = PIXELS_TO_METERS * x;
-	float posY = PIXELS_TO_METERS * (SCREEN_HEIGHT - y); // Inversión de Y
+	float posY = PIXELS_TO_METERS * (SCREEN_HEIGHT - y); // Inversiï¿½n de Y
 
 	if (!b2Vec2(posX, posY).IsValid())
 	{
@@ -455,7 +449,7 @@ PhysBody* ModulePhysics::CreatePolygonLoop(int x, int y, int* points, int point_
 	}
 
 	body.position.Set(posX, posY);
-	body.angle = -angle_rad; // **CLAVE: Invertir ángulo también**
+	body.angle = -angle_rad; // **CLAVE: Invertir ï¿½ngulo tambiï¿½n**
 
 	b2Body* b = world->CreateBody(&body);
 	if (!b)
@@ -533,13 +527,13 @@ b2RevoluteJoint* ModulePhysics::CreateFlipper(int x, int y, int width, int heigh
 		return nullptr;
 	}
 
-	// Crear base estática
+	// Crear base estï¿½tica
 	b2BodyDef baseDef;
 	baseDef.type = b2_staticBody;
 
 	// **CLAVE: Invertir Y para que coincida con el sistema de Box2D**
 	float posX = PIXELS_TO_METERS * x;
-	float posY = PIXELS_TO_METERS * (SCREEN_HEIGHT - y); // Inversión de Y
+	float posY = PIXELS_TO_METERS * (SCREEN_HEIGHT - y); // Inversiï¿½n de Y
 
 	if (!b2Vec2(posX, posY).IsValid())
 	{
@@ -566,7 +560,7 @@ b2RevoluteJoint* ModulePhysics::CreateFlipper(int x, int y, int width, int heigh
 	basePBody->body = base;
 	base->GetUserData().pointer = (uintptr_t)basePBody;
 
-	// Crear flipper dinámico
+	// Crear flipper dinï¿½mico
 	b2BodyDef flipperDef;
 	flipperDef.type = b2_dynamicBody;
 	flipperDef.position.Set(posX, posY);
@@ -628,13 +622,13 @@ b2RevoluteJoint* ModulePhysics::CreateFlipper(int x, int y, int width, int heigh
 
 	if (isLeft) {
 		jointDef.localAnchorB.Set(PIXELS_TO_METERS * -width * 0.3f, 0);
-		// **CLAVE: Invertir ángulos para el nuevo sistema de coordenadas**
+		// **CLAVE: Invertir ï¿½ngulos para el nuevo sistema de coordenadas**
 		jointDef.lowerAngle = -0.15f * b2_pi;
 		jointDef.upperAngle = 0.25f * b2_pi;
 	}
 	else {
 		jointDef.localAnchorB.Set(PIXELS_TO_METERS * width * 0.3f, 0);
-		// **CLAVE: Invertir ángulos para el nuevo sistema de coordenadas**
+		// **CLAVE: Invertir ï¿½ngulos para el nuevo sistema de coordenadas**
 		jointDef.lowerAngle = -0.25f * b2_pi;
 		jointDef.upperAngle = 0.15f * b2_pi;
 	}

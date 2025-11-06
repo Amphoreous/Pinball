@@ -31,10 +31,12 @@ ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start
     piece2Texture = { 0 };
     targetTexture = { 0 };
     specialTargetTexture = { 0 };
+    blackHoleTexture = { 0 };
     letterSTexture = { 0 };
     letterTTexture = { 0 };
     letterATexture = { 0 };
     letterRTexture = { 0 };
+    spaceshipTexture = { 0 };
 
     font = { 0 };
     titleFont = { 0 };
@@ -72,6 +74,14 @@ ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start
     comboCompleteTimer = 0.0f;
     comboCompleteFlashCount = 0;
     comboCompleteFlashColor = YELLOW;
+
+    bumperHitSfx = -1;
+    launchSfx = -1;
+    targetHitSfx = -1;
+    specialHitSfx = -1;
+    ballLostSfx = -1;
+    letterCollectSfx = -1;
+    nextLetterIndex = 0;
 }
 
 ModuleGame::~ModuleGame()
@@ -118,6 +128,9 @@ bool ModuleGame::Start()
 
     targetTexture = LoadTexture("assets/extra/piece1.png");
     specialTargetTexture = LoadTexture("assets/extra/piece2.png");
+
+    spaceshipTexture = LoadTexture("assets/special_objects/spaceship.png");
+    if (spaceshipTexture.id == 0) LOG("Warning: Failed to load spaceship texture");
 
     letterSTexture = LoadTexture("assets/letters/S.png");
     letterTTexture = LoadTexture("assets/letters/T.png");
@@ -235,7 +248,7 @@ bool ModuleGame::Start()
         targets.push_back(t2);
     }
 
-    PhysBody* st1 = App->physics->CreateRectangle(centerX, targetY - 80, 30, 30, b2_staticBody);
+    PhysBody* st1 = App->physics->CreateRectangle(centerX, 500, 50, 30, b2_staticBody);
     if (st1) {
         st1->listener = this;
         specialTargets.push_back(st1);
@@ -321,6 +334,7 @@ bool ModuleGame::CleanUp()
     if (piece2Texture.id) UnloadTexture(piece2Texture);
     if (targetTexture.id) UnloadTexture(targetTexture);
     if (specialTargetTexture.id) UnloadTexture(specialTargetTexture);
+    if (spaceshipTexture.id) UnloadTexture(spaceshipTexture);
     if (letterSTexture.id) UnloadTexture(letterSTexture);
     if (letterTTexture.id) UnloadTexture(letterTTexture);
     if (letterATexture.id) UnloadTexture(letterATexture);
@@ -1037,7 +1051,6 @@ void ModuleGame::RenderPlayingState()
         }
     }
 
-
     for (size_t i = 0; i < targets.size(); ++i)
     {
         int x = 0, y = 0;
@@ -1066,7 +1079,17 @@ void ModuleGame::RenderPlayingState()
         if (!specialTargets[i]) continue;
         specialTargets[i]->GetPosition(x, y);
 
-        if (specialTargetTexture.id)
+        if (spaceshipTexture.id)
+        {
+            float scale = 0.06f;
+            int width = (int)(spaceshipTexture.width * scale);
+            int height = (int)(spaceshipTexture.height * scale);
+            Rectangle src = { 0,0,(float)spaceshipTexture.width,(float)spaceshipTexture.height };
+            Rectangle dst = { (float)x, (float)y, (float)width, (float)height };
+            Vector2 origin = { width / 2.0f, height / 2.0f };
+            DrawTexturePro(spaceshipTexture, src, dst, origin, 0.0f, WHITE);
+        }
+        else if (specialTargetTexture.id)
         {
             float scale = 30.0f / (float)specialTargetTexture.width;
             int width = (int)(specialTargetTexture.width * scale);

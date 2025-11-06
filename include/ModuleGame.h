@@ -113,9 +113,13 @@ public:
     b2RevoluteJoint* rightFlipperJoint = nullptr;
 
     std::vector<PhysBody*> bumpers;
+    // Moving vertical targets (new feature) and special static targets
     std::vector<MovingTarget> targets;
     std::vector<PhysBody*> specialTargets;
+    // TMX-driven objects
+    std::vector<PhysBody*> extraPieces;  // e1 and e2 pieces from TMX
     std::vector<PhysBody*> blackHoles;
+    std::vector<PhysBody*> flipperBases; // bf objects from TMX
     std::vector<StarLetter> starLetters;
     std::vector<PhysBody*> bodiesToDestroy;
 
@@ -129,7 +133,6 @@ public:
     Texture2D piece1Texture = { 0 };
     Texture2D piece2Texture = { 0 };
     Texture2D targetTexture = { 0 };
-    Texture2D specialTargetTexture = { 0 };
     Texture2D blackHoleTexture = { 0 };
     Texture2D letterSTexture = { 0 };
     Texture2D letterTTexture = { 0 };
@@ -165,8 +168,11 @@ public:
     std::vector<int> mapCollisionPoints;
     std::vector<Rectangle> tmxBlackHoles;
     std::vector<Rectangle> tmxBumpers;
+    std::vector<Rectangle> tmxExtraPieces;
+    std::vector<std::pair<Rectangle, int>> tmxExtraPiecesWithType; // type: 1=e1, 2=e2
+    std::vector<std::pair<Rectangle, float>> tmxFlipperBases; // position and rotation
+    std::vector<std::pair<Rectangle, float>> tmxFlippers; // position and rotation
     PhysBody* mapBoundary = nullptr;
-
     float scoreFlashTimer = 0.0f;
     bool scoreFlashActive = false;
     int lastScoreIncrease = 0;

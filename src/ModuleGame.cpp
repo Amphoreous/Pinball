@@ -7,6 +7,7 @@
 #include "PhysBody.h"
 #include "GameState.h"
 #include <string.h>
+#include <algorithm>
 
 ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start_enabled)
 {
@@ -30,8 +31,11 @@ ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start
     piece1Texture = { 0 };
     piece2Texture = { 0 };
     targetTexture = { 0 };
+<<<<<<< HEAD
     specialTargetTexture = { 0 };
     blackHoleTexture = { 0 };
+=======
+>>>>>>> 409bfea (WIP: TMX-driven objects, flipper fixes, DrawTextEx font usage)
     letterSTexture = { 0 };
     letterTTexture = { 0 };
     letterATexture = { 0 };
@@ -94,8 +98,20 @@ bool ModuleGame::Start()
     LOG("ModuleGame Start(): loading assets");
     bool ret = true;
 
-    font = GetFontDefault();
-    titleFont = GetFontDefault();
+    // Load custom TTF font
+    font = LoadFontEx("assets/fonts/Planes_ValMore.ttf", 32, 0, 0);
+    if (font.texture.id == 0) 
+    {
+        LOG("Warning: Failed to load custom font, using default");
+        font = GetFontDefault();
+    }
+    
+    titleFont = LoadFontEx("assets/fonts/Planes_ValMore.ttf", 64, 0, 0);
+    if (titleFont.texture.id == 0)
+    {
+        LOG("Warning: Failed to load title font, using default");
+        titleFont = GetFontDefault();
+    }
 
     backgroundTexture = LoadTexture("assets/map/Pinball_Table.png");
     if (backgroundTexture.id == 0) LOG("Warning: Failed to load background texture");
@@ -128,7 +144,6 @@ bool ModuleGame::Start()
     if (piece2Texture.id == 0) LOG("Warning: Failed to load piece2 texture");
 
     targetTexture = LoadTexture("assets/extra/piece1.png");
-    specialTargetTexture = LoadTexture("assets/extra/piece2.png");
 
     spaceshipTexture = LoadTexture("assets/special_objects/spaceship.png");
     if (spaceshipTexture.id == 0) LOG("Warning: Failed to load spaceship texture");
@@ -180,7 +195,7 @@ bool ModuleGame::Start()
     LOG("Creating bumpers from TMX data...");
     for (const auto& bRect : tmxBumpers)
     {
-        // **CLAVE: Aplicar escalado UNA SOLA VEZ aquí**
+        // **CLAVE: Aplicar escalado UNA SOLA VEZ aquï¿½**
         float tmx_cx = (bRect.x + (bRect.width / 2.0f)) * scaleX;
         float tmx_cy = (bRect.y + (bRect.height / 2.0f)) * scaleY;
         float tmx_radius = (bRect.width / 2.0f) * scaleX;
@@ -203,15 +218,16 @@ bool ModuleGame::Start()
         }
     }
 
+<<<<<<< HEAD
     LOG("Creating special polygons from TMX data...");
     for (const auto& poly : tmxSpecialPolygons)
     {
-        // **CLAVE: Aplicar escalado UNA SOLA VEZ aquí**
+        // **CLAVE: Aplicar escalado UNA SOLA VEZ aquï¿½**
         int screen_x = (int)roundf(poly.x * scaleX);
         int screen_y = (int)roundf(poly.y * scaleY);
         float rotation_rad = poly.rotation * DEGTORAD;
 
-        // Escalar los puntos también
+        // Escalar los puntos tambiï¿½n
         std::vector<int> scaledPoints;
         for (size_t i = 0; i < poly.points.size(); i += 2)
         {
@@ -280,12 +296,15 @@ bool ModuleGame::Start()
     if (leftFlipper) leftFlipper->listener = this;
     if (rightFlipper) rightFlipper->listener = this;
 
+    // Continue with TMX-driven setup
+    LOG("Creating flippers from TMX data...");
+
     CreateBallLossSensor();
 
     LOG("Creating black holes from TMX data...");
     for (const auto& bhRect : tmxBlackHoles)
     {
-        // **CLAVE: Aplicar escalado UNA SOLA VEZ aquí**
+        // **CLAVE: Aplicar escalado UNA SOLA VEZ aquï¿½**
         float tmx_cx = (bhRect.x + (bhRect.width / 2.0f)) * scaleX;
         float tmx_cy = (bhRect.y + (bhRect.height / 2.0f)) * scaleY;
         float tmx_radius = (bhRect.width / 2.0f) * scaleX;
@@ -298,13 +317,107 @@ bool ModuleGame::Start()
             bhRect.x + bhRect.width / 2, bhRect.y + bhRect.height / 2, bhRect.width / 2,
             screen_x, screen_y, screen_radius);
 
-        PhysBody* bh = App->physics->CreateCircle(screen_x, screen_y, screen_radius, b2_staticBody);
+        PhysBody* bh = App->physics->CreateCircleSensor(screen_x, screen_y, screen_radius);
         if (bh)
         {
-            bh->body->GetFixtureList()->SetSensor(true);
             bh->listener = this;
             blackHoles.push_back(bh);
         }
+    }
+
+    LOG("Creating extra pieces (e1/e2) from TMX data...");
+    for (const auto& piecePair : tmxExtraPiecesWithType)
+    {
+        const Rectangle& rect = piecePair.first;
+        int type = piecePair.second;
+        
+        float tmx_cx = rect.x + (rect.width / 2.0f);
+        float tmx_cy = rect.y + (rect.height / 2.0f);
+        float tmx_w = rect.width;
+        float tmx_h = rect.height;
+
+        int screen_x = (int)roundf(tmx_cx * scaleX);
+        int screen_y = (int)roundf(tmx_cy * scaleY);
+        int screen_w = (int)roundf(tmx_w * scaleX);
+        int screen_h = (int)roundf(tmx_h * scaleY);
+
+        LOG("Creating extra piece type %d at TMX(%.0f, %.0f) -> Screen(%d, %d)", 
+            type, tmx_cx, tmx_cy, screen_x, screen_y);
+
+        // Create as static triangular obstacle
+        PhysBody* piece = App->physics->CreateRectangle(screen_x, screen_y, screen_w, screen_h, b2_staticBody);
+        if (piece)
+        {
+            if (piece->body && piece->body->GetFixtureList())
+            {
+                piece->body->GetFixtureList()->SetRestitution(0.7f);
+            }
+            piece->listener = this;
+            extraPieces.push_back(piece);
+        }
+    }
+
+    LOG("Creating flipper bases (BF) from TMX data...");
+    for (const auto& basePair : tmxFlipperBases)
+    {
+        const Rectangle& rect = basePair.first;
+        
+        float tmx_cx = rect.x + (rect.width / 2.0f);
+        float tmx_cy = rect.y + (rect.height / 2.0f);
+
+        int screen_x = (int)roundf(tmx_cx * scaleX);
+        int screen_y = (int)roundf(tmx_cy * scaleY);
+        int screen_radius = (int)roundf((rect.width / 2.0f) * scaleX);
+
+        LOG("Creating flipper base at TMX(%.0f, %.0f) -> Screen(%d, %d)", 
+            tmx_cx, tmx_cy, screen_x, screen_y);
+
+        PhysBody* base = App->physics->CreateCircle(screen_x, screen_y, screen_radius, b2_staticBody);
+        if (base)
+        {
+            base->listener = this;
+            flipperBases.push_back(base);
+        }
+    }
+
+    LOG("Creating flippers (FB) from TMX data...");
+    if (tmxFlippers.size() >= 2)
+    {
+        // Sort by X position to identify left and right flippers
+        auto flippers = tmxFlippers;
+        std::sort(flippers.begin(), flippers.end(), 
+            [](const std::pair<Rectangle, float>& a, const std::pair<Rectangle, float>& b) {
+                return a.first.x < b.first.x;
+            });
+
+        // Left flipper (first/leftmost)
+        const Rectangle& leftRect = flippers[0].first;
+        float left_rotation = flippers[0].second;
+        float tmx_left_x = leftRect.x;
+        float tmx_left_y = leftRect.y;
+        int screen_left_x = (int)roundf(tmx_left_x * scaleX);
+        int screen_left_y = (int)roundf(tmx_left_y * scaleY);
+
+        // Right flipper (second/rightmost)
+        const Rectangle& rightRect = flippers[1].first;
+        float right_rotation = flippers[1].second;
+        float tmx_right_x = rightRect.x;
+        float tmx_right_y = rightRect.y;
+        int screen_right_x = (int)roundf(tmx_right_x * scaleX);
+        int screen_right_y = (int)roundf(tmx_right_y * scaleY);
+
+        LOG("Creating LEFT flipper at Screen(%d, %d) rotation %.1f", screen_left_x, screen_left_y, left_rotation);
+        LOG("Creating RIGHT flipper at Screen(%d, %d) rotation %.1f", screen_right_x, screen_right_y, right_rotation);
+
+        leftFlipperJoint = App->physics->CreateFlipper(screen_left_x, screen_left_y, 80, 20, true, &leftFlipper);
+        rightFlipperJoint = App->physics->CreateFlipper(screen_right_x, screen_right_y, 80, 20, false, &rightFlipper);
+        
+        if (leftFlipper) leftFlipper->listener = this;
+        if (rightFlipper) rightFlipper->listener = this;
+    }
+    else
+    {
+        LOG("Warning: Not enough flipper objects in TMX! Found %d, need 2", (int)tmxFlippers.size());
     }
 
     InitGameData(&gameData);
@@ -351,7 +464,6 @@ bool ModuleGame::CleanUp()
     if (piece1Texture.id) UnloadTexture(piece1Texture);
     if (piece2Texture.id) UnloadTexture(piece2Texture);
     if (targetTexture.id) UnloadTexture(targetTexture);
-    if (specialTargetTexture.id) UnloadTexture(specialTargetTexture);
     if (spaceshipTexture.id) UnloadTexture(spaceshipTexture);
     if (movingTargetTexture.id) UnloadTexture(movingTargetTexture);
     if (letterSTexture.id) UnloadTexture(letterSTexture);
@@ -359,7 +471,10 @@ bool ModuleGame::CleanUp()
     if (letterATexture.id) UnloadTexture(letterATexture);
     if (letterRTexture.id) UnloadTexture(letterRTexture);
     if (titleTexture.id) UnloadTexture(titleTexture);
-    if (titleFont.texture.id) UnloadFont(titleFont);
+    
+    // Unload custom fonts
+    if (font.texture.id && font.texture.id != GetFontDefault().texture.id) UnloadFont(font);
+    if (titleFont.texture.id && titleFont.texture.id != GetFontDefault().texture.id) UnloadFont(titleFont);
 
     for (auto& starLetter : starLetters) {
         if (starLetter.body && starLetter.body->body) {
@@ -381,15 +496,26 @@ bool ModuleGame::CleanUp()
         }
     }
     targets.clear();
+<<<<<<< HEAD
 
     bumpers.clear();
     specialTargets.clear();
     specialPolygons.clear();
+=======
+    extraPieces.clear();
+    flipperBases.clear();
+>>>>>>> 409bfea (WIP: TMX-driven objects, flipper fixes, DrawTextEx font usage)
     blackHoles.clear();
     mapCollisionPoints.clear();
     tmxBlackHoles.clear();
     tmxBumpers.clear();
+<<<<<<< HEAD
     tmxSpecialPolygons.clear();
+=======
+    tmxExtraPiecesWithType.clear();
+    tmxFlipperBases.clear();
+    tmxFlippers.clear();
+>>>>>>> 409bfea (WIP: TMX-driven objects, flipper fixes, DrawTextEx font usage)
 
     return true;
 }
@@ -649,12 +775,6 @@ CollisionType ModuleGame::IdentifyCollision(PhysBody* bodyA, PhysBody* bodyB)
             return COLLISION_TARGET;
     }
 
-    for (size_t i = 0; i < specialTargets.size(); ++i)
-    {
-        if (specialTargets[i] && (bodyA == specialTargets[i] || bodyB == specialTargets[i]))
-            return COLLISION_SPECIAL_TARGET;
-    }
-
     for (size_t i = 0; i < starLetters.size(); ++i)
     {
         if (starLetters[i].body && (bodyA == starLetters[i].body || bodyB == starLetters[i].body))
@@ -840,23 +960,21 @@ void ModuleGame::RenderMenuState()
     else
     {
         const char* title = "SPACE PINBALL";
-        int fontSize = 40;
-        int textWidth = MeasureText(title, fontSize);
-        DrawText(title, screenCenterX - textWidth / 2, titleY, fontSize, YELLOW);
+        Vector2 titleSize = MeasureTextEx(titleFont, title, 64, 2);
+        DrawTextEx(titleFont, title, { (float)(screenCenterX - titleSize.x / 2), (float)titleY }, 64, 2, YELLOW);
     }
 
     const char* startText = "PRESS SPACE TO START";
-    int fontSize = 24;
-    int textWidth = MeasureText(startText, fontSize);
-    DrawText(startText, screenCenterX - textWidth / 2, startTextY, fontSize, WHITE);
+    Vector2 startSize = MeasureTextEx(font, startText, 32, 1);
+    DrawTextEx(font, startText, { (float)(screenCenterX - startSize.x / 2), (float)startTextY }, 32, 1, WHITE);
 
     const char* highScoreText = TextFormat("High Score: %d", gameData.highestScore);
-    int highScoreWidth = MeasureText(highScoreText, 22);
-    DrawText(highScoreText, screenCenterX - highScoreWidth / 2, highScoreY, 22, GOLD);
+    Vector2 highScoreSize = MeasureTextEx(font, highScoreText, 28, 1);
+    DrawTextEx(font, highScoreText, { (float)(screenCenterX - highScoreSize.x / 2), (float)highScoreY }, 28, 1, GOLD);
 
     const char* controlsText = "LEFT/RIGHT - Flippers | DOWN - Launch | P - Pause";
-    int controlsWidth = MeasureText(controlsText, 14);
-    DrawText(controlsText, screenCenterX - controlsWidth / 2, controlsY, 14, LIGHTGRAY);
+    Vector2 controlsSize = MeasureTextEx(font, controlsText, 20, 1);
+    DrawTextEx(font, controlsText, { (float)(screenCenterX - controlsSize.x / 2), (float)controlsY }, 20, 1, LIGHTGRAY);
 }
 
 void ModuleGame::UpdatePlayingState()
@@ -883,17 +1001,17 @@ void ModuleGame::UpdatePlayingState()
     if (leftFlipperJoint)
     {
         if (IsKeyDown(KEY_LEFT))
-            leftFlipperJoint->SetMotorSpeed(-20.0f);
+            leftFlipperJoint->SetMotorSpeed(30.0f);  // Fast upward rotation
         else
-            leftFlipperJoint->SetMotorSpeed(10.0f);
+            leftFlipperJoint->SetMotorSpeed(-15.0f); // Fall back down
     }
 
     if (rightFlipperJoint)
     {
         if (IsKeyDown(KEY_RIGHT))
-            rightFlipperJoint->SetMotorSpeed(20.0f);
+            rightFlipperJoint->SetMotorSpeed(-30.0f); // Fast upward rotation
         else
-            rightFlipperJoint->SetMotorSpeed(-10.0f);
+            rightFlipperJoint->SetMotorSpeed(15.0f);  // Fall back down
     }
 }
 
@@ -922,23 +1040,23 @@ void ModuleGame::RenderPlayingState()
         scoreColor = YELLOW;
     }
 
-    DrawText(TextFormat("SCORE: %d", gameData.currentScore), 20, 20, 25, scoreColor);
-    DrawText(TextFormat("Previous: %d", gameData.previousScore), 20, 55, 20, GRAY);
-    DrawText(TextFormat("High: %d", gameData.highestScore), 20, 85, 20, GOLD);
-    DrawText(TextFormat("Balls: %d", gameData.ballsLeft), 20, 120, 25, RED);
-    DrawText(TextFormat("Round: %d", gameData.currentRound), 20, 150, 20, SKYBLUE);
+    DrawTextEx(font, TextFormat("SCORE: %d", gameData.currentScore), { 20, 20 }, 32, 1, scoreColor);
+    DrawTextEx(font, TextFormat("Previous: %d", gameData.previousScore), { 20, 60 }, 24, 1, GRAY);
+    DrawTextEx(font, TextFormat("High: %d", gameData.highestScore), { 20, 95 }, 24, 1, GOLD);
+    DrawTextEx(font, TextFormat("Balls: %d", gameData.ballsLeft), { 20, 130 }, 32, 1, RED);
+    DrawTextEx(font, TextFormat("Round: %d", gameData.currentRound), { 20, 170 }, 24, 1, SKYBLUE);
 
     if (gameData.scoreMultiplier > 1 || gameData.comboMultiplier > 1) {
-        DrawText(TextFormat("Multiplier: %dx", gameData.scoreMultiplier * gameData.comboMultiplier),
-            20, 180, 18, GREEN);
+        DrawTextEx(font, TextFormat("Multiplier: %dx", gameData.scoreMultiplier * gameData.comboMultiplier),
+            { 20, 205 }, 22, 1, GREEN);
     }
 
     if (comboCompleteEffect && comboCompleteFlashCount < 10) {
         const char* comboText = "COMBO COMPLETE! +5000 POINTS!";
-        int textWidth = MeasureText(comboText, 30);
+        Vector2 textSize = MeasureTextEx(font, comboText, 32, 1);
 
-        DrawRectangle(SCREEN_WIDTH / 2 - textWidth / 2 - 10, 250, textWidth + 20, 50, Color{ 0,0,0,200 });
-        DrawText(comboText, SCREEN_WIDTH / 2 - textWidth / 2, 260, 30, comboCompleteFlashColor);
+        DrawRectangle(SCREEN_WIDTH / 2 - textSize.x / 2 - 10, 250, textSize.x + 20, 50, Color{ 0,0,0,200 });
+        DrawTextEx(font, comboText, { SCREEN_WIDTH / 2 - textSize.x / 2, 260 }, 32, 1, comboCompleteFlashColor);
 
         for (int i = 0; i < 8; i++) {
             float angle = comboCompleteTimer * 10.0f + i * (360.0f / 8.0f);
@@ -1109,12 +1227,14 @@ void ModuleGame::RenderPlayingState()
         }
     }
 
-    for (size_t i = 0; i < specialTargets.size(); ++i)
+    // Render extra pieces (e1/e2 from TMX)
+    for (size_t i = 0; i < extraPieces.size(); ++i)
     {
         int x = 0, y = 0;
-        if (!specialTargets[i]) continue;
-        specialTargets[i]->GetPosition(x, y);
+        if (!extraPieces[i]) continue;
+        extraPieces[i]->GetPosition(x, y);
 
+<<<<<<< HEAD
         if (spaceshipTexture.id)
         {
             float scale = 0.06f;
@@ -1126,18 +1246,56 @@ void ModuleGame::RenderPlayingState()
             DrawTexturePro(spaceshipTexture, src, dst, origin, 0.0f, WHITE);
         }
         else if (specialTargetTexture.id)
+=======
+        // Determine which texture to use based on index (first ones are e1, later ones are e2)
+        Texture2D* pieceTexture = (i < tmxExtraPiecesWithType.size() && tmxExtraPiecesWithType[i].second == 1) ? 
+                                   &piece1Texture : &piece2Texture;
+        
+        if (pieceTexture->id)
+>>>>>>> 409bfea (WIP: TMX-driven objects, flipper fixes, DrawTextEx font usage)
         {
-            float scale = 30.0f / (float)specialTargetTexture.width;
-            int width = (int)(specialTargetTexture.width * scale);
-            int height = (int)(specialTargetTexture.height * scale);
-            Rectangle src = { 0,0,(float)specialTargetTexture.width,(float)specialTargetTexture.height };
+            float scale = (float)extraPieces[i]->width / (float)pieceTexture->width;
+            int width = (int)(pieceTexture->width * scale);
+            int height = (int)(pieceTexture->height * scale);
+            Rectangle src = { 0,0,(float)pieceTexture->width,(float)pieceTexture->height };
             Rectangle dst = { (float)x, (float)y, (float)width, (float)height };
             Vector2 origin = { width / 2.0f, height / 2.0f };
-            DrawTexturePro(specialTargetTexture, src, dst, origin, 0.0f, PURPLE);
+            
+            // Apply rotation if e2 (piece2)
+            float rotation = 0.0f;
+            if (i < tmxExtraPiecesWithType.size())
+            {
+                rotation = 45.0f; // e1/e2 pieces are at 45 degrees
+            }
+            
+            DrawTexturePro(*pieceTexture, src, dst, origin, rotation, WHITE);
         }
         else
         {
-            DrawCircle(x, y, 15, PURPLE);
+            DrawCircle(x, y, 15, YELLOW);
+        }
+    }
+
+    // Render flipper bases (BF from TMX)
+    for (size_t i = 0; i < flipperBases.size(); ++i)
+    {
+        int x = 0, y = 0;
+        if (!flipperBases[i]) continue;
+        flipperBases[i]->GetPosition(x, y);
+
+        if (flipperBaseTexture.id)
+        {
+            float bs = (float)flipperBases[i]->width / (float)flipperBaseTexture.width;
+            int bw = (int)(flipperBaseTexture.width * bs);
+            int bh = (int)(flipperBaseTexture.height * bs);
+            Rectangle src = { 0,0,(float)flipperBaseTexture.width,(float)flipperBaseTexture.height };
+            Rectangle dst = { (float)x, (float)y, (float)bw, (float)bh };
+            Vector2 origin = { bw / 2.0f, bh / 2.0f };
+            DrawTexturePro(flipperBaseTexture, src, dst, origin, 0.0f, WHITE);
+        }
+        else
+        {
+            DrawCircle(x, y, (float)flipperBases[i]->width / 2.0f, DARKGRAY);
         }
     }
 
@@ -1168,15 +1326,15 @@ void ModuleGame::RenderPlayingState()
                 float localX = tmxPoly.points[j] * scaleX;
                 float localY = tmxPoly.points[j + 1] * scaleY;
 
-                // Aplicamos rotación
+                // Aplicamos rotaciï¿½n
                 float rotatedX = localX * cosf(angle_rad) - localY * sinf(angle_rad);
                 float rotatedY = localX * sinf(angle_rad) + localY * cosf(angle_rad);
 
-                // Sumamos la posición central (ya escalada)
+                // Sumamos la posiciï¿½n central (ya escalada)
                 screenPoints.push_back(Vector2{ center.x + rotatedX, center.y + rotatedY });
             }
 
-            // Dibujamos el polígono
+            // Dibujamos el polï¿½gono
             if (screenPoints.size() > 1)
             {
                 for (size_t j = 0; j < screenPoints.size(); ++j)
@@ -1193,17 +1351,6 @@ void ModuleGame::RenderPlayingState()
         leftFlipper->GetPosition(x, y);
         float angle = leftFlipper->body->GetAngle() * RADTODEG;
 
-        if (flipperBaseTexture.id)
-        {
-            float bs = 30.0f / (float)flipperBaseTexture.width;
-            int bw = (int)(flipperBaseTexture.width * bs);
-            int bh = (int)(flipperBaseTexture.height * bs);
-            Rectangle src = { 0,0,(float)flipperBaseTexture.width,(float)flipperBaseTexture.height };
-            Rectangle dst = { (float)x, (float)y, (float)bw, (float)bh };
-            Vector2 origin = { bw / 2.0f, bh / 2.0f };
-            DrawTexturePro(flipperBaseTexture, src, dst, origin, 0.0f, WHITE);
-        }
-
         if (flipperTexture.id)
         {
             float s = 80.0f / (float)flipperTexture.width;
@@ -1211,7 +1358,7 @@ void ModuleGame::RenderPlayingState()
             int h = (int)(flipperTexture.height * s);
             Rectangle src = { 0,0,(float)flipperTexture.width,(float)flipperTexture.height };
             Rectangle dst = { (float)x, (float)y, (float)w, (float)h };
-            Vector2 origin = { w * 0.2f, h / 2.0f };
+            Vector2 origin = { w * 0.15f, h / 2.0f };  // Left flipper pivots on left side
             DrawTexturePro(flipperTexture, src, dst, origin, angle, WHITE);
         }
     }
@@ -1239,8 +1386,9 @@ void ModuleGame::RenderPlayingState()
             int w = (int)(flipperTexture.width * s);
             int h = (int)(flipperTexture.height * s);
             Rectangle src = { 0,0,(float)flipperTexture.width,(float)flipperTexture.height };
-            Rectangle dst = { (float)x, (float)y, (float)w, (float)h };
-            Vector2 origin = { w * 0.8f, h / 2.0f };
+            // Flip texture horizontally for right flipper
+            Rectangle dst = { (float)x, (float)y, (float)-w, (float)h };
+            Vector2 origin = { -w * 0.15f, h / 2.0f }; // Right flipper pivots on right side (mirrored)
             DrawTexturePro(flipperTexture, src, dst, origin, angle, WHITE);
         }
     }
@@ -1289,11 +1437,11 @@ void ModuleGame::RenderPausedState()
     DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Color{ 0, 0, 0, 180 });
 
     const char* pauseText = "PAUSED";
-    int textWidth = MeasureText(pauseText, 80);
-    DrawText(pauseText, SCREEN_WIDTH / 2 - textWidth / 2, 200, 80, YELLOW);
+    Vector2 pauseSize = MeasureTextEx(titleFont, pauseText, 64, 2);
+    DrawTextEx(titleFont, pauseText, { SCREEN_WIDTH / 2 - pauseSize.x / 2, 200 }, 64, 2, YELLOW);
 
-    DrawText("Press P or SPACE to Resume", SCREEN_WIDTH / 2 - 180, 350, 25, WHITE);
-    DrawText("Press M to Main Menu", SCREEN_WIDTH / 2 - 150, 400, 25, LIGHTGRAY);
+    DrawTextEx(font, "Press P or SPACE to Resume", { SCREEN_WIDTH / 2 - 200, 350 }, 28, 1, WHITE);
+    DrawTextEx(font, "Press M to Main Menu", { SCREEN_WIDTH / 2 - 150, 400 }, 28, 1, LIGHTGRAY);
 }
 
 void ModuleGame::UpdateGameOverState()
@@ -1703,7 +1851,13 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
     mapCollisionPoints.clear();
     tmxBlackHoles.clear();
     tmxBumpers.clear();
+<<<<<<< HEAD
     tmxSpecialPolygons.clear();
+=======
+    tmxExtraPiecesWithType.clear();
+    tmxFlipperBases.clear();
+    tmxFlippers.clear();
+>>>>>>> 409bfea (WIP: TMX-driven objects, flipper fixes, DrawTextEx font usage)
 
     char* filePtr = fileContent;
     int objectsFound = 0;
@@ -1769,6 +1923,75 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
                     // **CLAVE: Guardar coordenadas TMX SIN escalar**
                     tmxBumpers.push_back(Rectangle{ x, y, w, h });
                     LOG("TMX parse: Found Bumper at TMX(%.0f, %.0f, %.0fx%.0f)", x, y, w, h);
+                    objectsFound++;
+                }
+            }
+            else if (strncmp(nameTag + 6, "e1", 2) == 0)
+            {
+                // e1 = piece1.png (triangular extra piece)
+                char* polygonMarker = strstr(filePtr, "<polygon points=\"");
+                if (polygonMarker && polygonMarker < objectEnd && attributesFound)
+                {
+                    Rectangle rect = { x, y, w, h };
+                    tmxExtraPiecesWithType.push_back({ rect, 1 });
+                    LOG("TMX parse: Found e1 (piece1) at (%.0f, %.0f)", x, y);
+                    objectsFound++;
+                }
+            }
+            else if (strncmp(nameTag + 6, "e2", 2) == 0)
+            {
+                // e2 = piece2.png (triangular extra piece)
+                char* polygonMarker = strstr(filePtr, "<polygon points=\"");
+                if (polygonMarker && polygonMarker < objectEnd && attributesFound)
+                {
+                    // Get rotation attribute
+                    float rotation = 0.0f;
+                    char* rotStr = strstr(filePtr, "rotation=\"");
+                    if (rotStr && rotStr < objectEnd)
+                    {
+                        rotation = (float)atof(rotStr + 10);
+                    }
+                    
+                    Rectangle rect = { x, y, w, h };
+                    tmxExtraPiecesWithType.push_back({ rect, 2 });
+                    LOG("TMX parse: Found e2 (piece2) at (%.0f, %.0f) rotation %.1f", x, y, rotation);
+                    objectsFound++;
+                }
+            }
+            else if (strncmp(nameTag + 6, "BF", 2) == 0)
+            {
+                // BF = flipper base (Base Flipper Bat.png)
+                if (attributesFound)
+                {
+                    float rotation = 0.0f;
+                    char* rotStr = strstr(filePtr, "rotation=\"");
+                    if (rotStr && rotStr < objectEnd)
+                    {
+                        rotation = (float)atof(rotStr + 10);
+                    }
+                    
+                    Rectangle rect = { x, y, w, h };
+                    tmxFlipperBases.push_back({ rect, rotation });
+                    LOG("TMX parse: Found flipper base at (%.0f, %.0f)", x, y);
+                    objectsFound++;
+                }
+            }
+            else if (strncmp(nameTag + 6, "FB", 2) == 0)
+            {
+                // FB = flipper (flipper bat.png) - these are the actual flippers
+                char* polygonMarker = strstr(filePtr, "<polygon points=\"");
+                if (polygonMarker && polygonMarker < objectEnd && attributesFound)
+                {
+                    float rotation = 0.0f;
+                    char* rotStr = strstr(filePtr, "rotation=\"");
+                    if (rotStr && rotStr < objectEnd)
+                    {
+                        rotation = (float)atof(rotStr + 10);
+                    }
+                    
+                    Rectangle rect = { x, y, w, h };
+                    tmxFlippers.push_back({ rect, rotation });
+                    LOG("TMX parse: Found flipper at (%.0f, %.0f) rotation %.1f", x, y, rotation);
                     objectsFound++;
                 }
             }
@@ -1890,7 +2113,7 @@ void ModuleGame::CreateMapCollision()
         return;
     }
 
-    // **CLAVE: Aplicar escalado UNA SOLA VEZ aquí**
+    // **CLAVE: Aplicar escalado UNA SOLA VEZ aquï¿½**
     const int TMX_MAP_W = 1280;
     const int TMX_MAP_H = 1600;
     float scaleX = (float)SCREEN_WIDTH / (float)TMX_MAP_W;

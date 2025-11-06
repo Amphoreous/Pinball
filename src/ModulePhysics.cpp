@@ -175,6 +175,61 @@ PhysBody* ModulePhysics::CreateCircle(int x, int y, int radius, b2BodyType type)
 	return pbody;
 }
 
+// Create a static circle sensor (non-colliding) at screen coordinates
+PhysBody* ModulePhysics::CreateCircleSensor(int x, int y, int radius)
+{
+	if (!world)
+	{
+		LOG("ERROR: World is null in CreateCircleSensor");
+		return nullptr;
+	}
+
+	if (radius <= 0)
+	{
+		LOG("ERROR: Invalid radius in CreateCircleSensor: %d", radius);
+		return nullptr;
+	}
+
+	b2BodyDef body;
+	body.type = b2_staticBody;
+
+	float posX = PIXELS_TO_METERS * x;
+	float posY = PIXELS_TO_METERS * (SCREEN_HEIGHT - y);
+	if (!b2Vec2(posX, posY).IsValid())
+	{
+		LOG("ERROR: Invalid position in CreateCircleSensor: (%f, %f)", posX, posY);
+		return nullptr;
+	}
+	body.position.Set(posX, posY);
+
+	b2Body* b = world->CreateBody(&body);
+	if (!b)
+	{
+		LOG("ERROR: Failed to create body in CreateCircleSensor");
+		return nullptr;
+	}
+
+	b2CircleShape shape;
+	shape.m_radius = PIXELS_TO_METERS * radius;
+
+	b2FixtureDef fixture;
+	fixture.shape = &shape;
+	fixture.isSensor = true;
+	if (!b->CreateFixture(&fixture))
+	{
+		LOG("ERROR: Failed to create fixture in CreateCircleSensor");
+		world->DestroyBody(b);
+		return nullptr;
+	}
+
+	PhysBody* pbody = new PhysBody();
+	pbody->body = b;
+	b->GetUserData().pointer = (uintptr_t)pbody;
+	pbody->width = pbody->height = radius * 2;
+
+	return pbody;
+}
+
 PhysBody* ModulePhysics::CreateRectangle(int x, int y, int width, int height, b2BodyType type)
 {
 	if (!world)
@@ -634,6 +689,24 @@ b2RevoluteJoint* ModulePhysics::CreateFlipper(int x, int y, int width, int heigh
 	}
 
 	jointDef.enableLimit = true;
+<<<<<<< HEAD
+=======
+	
+	// Set angle limits - flippers rotate from down to up
+	if(isLeft)
+	{
+		jointDef.lowerAngle = -5 * DEGTORAD;  // Resting position (slightly down)
+		jointDef.upperAngle = 45 * DEGTORAD;  // Activated position (up)
+	}
+	else
+	{
+		jointDef.lowerAngle = -45 * DEGTORAD; // Activated position (up)  
+		jointDef.upperAngle = 5 * DEGTORAD;   // Resting position (slightly down)
+	}
+	
+	jointDef.maxMotorTorque = 2000.0f; // Very strong motor for snappy flippers
+	jointDef.motorSpeed = 0.0f;
+>>>>>>> 409bfea (WIP: TMX-driven objects, flipper fixes, DrawTextEx font usage)
 	jointDef.enableMotor = true;
 	jointDef.maxMotorTorque = 100.0f;
 

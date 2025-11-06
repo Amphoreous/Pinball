@@ -595,13 +595,13 @@ b2RevoluteJoint* ModulePhysics::CreateFlipper(int x, int y, int width, int heigh
 		return nullptr;
 	}
 
-	// Crear base est�tica
+	// Crear base esttica
 	b2BodyDef baseDef;
 	baseDef.type = b2_staticBody;
 
 	// **CLAVE: Invertir Y para que coincida con el sistema de Box2D**
 	float posX = PIXELS_TO_METERS * x;
-	float posY = PIXELS_TO_METERS * (SCREEN_HEIGHT - y); // Inversi�n de Y
+	float posY = PIXELS_TO_METERS * (SCREEN_HEIGHT - y); // Inversin de Y
 
 	if (!b2Vec2(posX, posY).IsValid())
 	{
@@ -619,7 +619,7 @@ b2RevoluteJoint* ModulePhysics::CreateFlipper(int x, int y, int width, int heigh
 	}
 
 	b2CircleShape baseShape;
-	baseShape.m_radius = PIXELS_TO_METERS * 5;
+	baseShape.m_radius = PIXELS_TO_METERS * 5; // Un ancla pequeña
 	b2FixtureDef baseFixture;
 	baseFixture.shape = &baseShape;
 	base->CreateFixture(&baseFixture);
@@ -628,10 +628,10 @@ b2RevoluteJoint* ModulePhysics::CreateFlipper(int x, int y, int width, int heigh
 	basePBody->body = base;
 	base->GetUserData().pointer = (uintptr_t)basePBody;
 
-	// Crear flipper din�mico
+	// Crear flipper dinmico
 	b2BodyDef flipperDef;
 	flipperDef.type = b2_dynamicBody;
-	flipperDef.position.Set(posX, posY);
+	flipperDef.position.Set(posX, posY); // Se crea en la misma posición que la base
 	b2Body* flipper = world->CreateBody(&flipperDef);
 
 	if (!flipper)
@@ -642,33 +642,39 @@ b2RevoluteJoint* ModulePhysics::CreateFlipper(int x, int y, int width, int heigh
 		return nullptr;
 	}
 
+	// =================================================================
+	// INICIO DE LA SECCIÓN CORREGIDA (Caja Sólida)
+	// =================================================================
 	b2PolygonShape flipperShape;
-	float flipperWidth = PIXELS_TO_METERS * width;
-	float flipperHeight = PIXELS_TO_METERS * height;
+	float flipperWidthM = PIXELS_TO_METERS * width;
+	float flipperHeightM = PIXELS_TO_METERS * height;
 
-	if (flipperWidth <= 0.0f || flipperHeight <= 0.0f)
-	{
-		LOG("ERROR: Invalid flipper dimensions: %fx%f", flipperWidth, flipperHeight);
-		world->DestroyBody(base);
-		world->DestroyBody(flipper);
-		delete basePBody;
-		return nullptr;
-	}
+	// Definir las 'medias' dimensiones de la caja
+	float halfWidth = flipperWidthM * 0.5f;
+	float halfHeight = flipperHeightM * 0.5f;
 
-	b2Vec2 vertices[4];
+	// Crear un vector para desplazar el centro de la caja
+	// El cuerpo del flipper (flipper) se crea en (0,0) relativo a su base (base)
+	// El pivote (joint) estará en (0,0)
+	b2Vec2 centerOffset(0.0f, 0.0f);
+
 	if (isLeft) {
-		vertices[0].Set(0, -flipperHeight / 2);
-		vertices[1].Set(flipperWidth * 0.8f, -flipperHeight / 4);
-		vertices[2].Set(flipperWidth * 0.8f, flipperHeight / 4);
-		vertices[3].Set(0, flipperHeight / 2);
+		// Si es izquierdo, el pivote está a la izquierda.
+		// El centro de la caja debe estar a la DERECHA del pivote.
+		centerOffset.Set(halfWidth, 0.0f);
 	}
 	else {
-		vertices[0].Set(0, -flipperHeight / 2);
-		vertices[1].Set(-flipperWidth * 0.8f, -flipperHeight / 4);
-		vertices[2].Set(-flipperWidth * 0.8f, flipperHeight / 4);
-		vertices[3].Set(0, flipperHeight / 2);
+		// Si es derecho, el pivote está a la derecha.
+		// El centro de la caja debe estar a la IZQUIERDA del pivote.
+		centerOffset.Set(-halfWidth, 0.0f);
 	}
-	flipperShape.Set(vertices, 4);
+
+	// Configurar la forma como una caja, con el centro desplazado
+	// El origen del cuerpo (y el pivote) estará en un extremo de la caja.
+	flipperShape.SetAsBox(halfWidth, halfHeight, centerOffset, 0.0f);
+	// =================================================================
+	// FIN DE LA SECCIÓN CORREGIDA
+	// =================================================================
 
 	b2FixtureDef flipperFixture;
 	flipperFixture.shape = &flipperShape;
@@ -686,17 +692,20 @@ b2RevoluteJoint* ModulePhysics::CreateFlipper(int x, int y, int width, int heigh
 	b2RevoluteJointDef jointDef;
 	jointDef.bodyA = base;
 	jointDef.bodyB = flipper;
+	// El ancla en la base (estática) está en su origen (0,0)
 	jointDef.localAnchorA.Set(0, 0);
 
+	// **FIX:** El ancla en el bate (dinámico) AHORA también está en su origen (0,0),
+	// porque hemos desplazado la *forma* de la caja, no el cuerpo.
+	jointDef.localAnchorB.Set(0, 0);
+
 	if (isLeft) {
-		jointDef.localAnchorB.Set(PIXELS_TO_METERS * -width * 0.3f, 0);
-		// **CLAVE: Invertir �ngulos para el nuevo sistema de coordenadas**
+		// **CLAVE: Invertir ngulos para el nuevo sistema de coordenadas**
 		jointDef.lowerAngle = -0.15f * b2_pi;
 		jointDef.upperAngle = 0.25f * b2_pi;
 	}
 	else {
-		jointDef.localAnchorB.Set(PIXELS_TO_METERS * width * 0.3f, 0);
-		// **CLAVE: Invertir �ngulos para el nuevo sistema de coordenadas**
+		// **CLAVE: Invertir ngulos para el nuevo sistema de coordenadas**
 		jointDef.lowerAngle = -0.25f * b2_pi;
 		jointDef.upperAngle = 0.15f * b2_pi;
 	}

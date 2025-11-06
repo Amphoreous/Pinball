@@ -128,7 +128,7 @@ public:
 
     Texture2D ballTexture = { 0 };
     Texture2D backgroundTexture = { 0 };
-    Texture2D flipperTexture = { 0 };
+    // --- flipperTexture ELIMINADO ---
     Texture2D flipperBaseTexture = { 0 };
     Texture2D bumper1Texture = { 0 };
     Texture2D bumper2Texture = { 0 };
@@ -174,7 +174,6 @@ public:
     std::vector<Rectangle> tmxExtraPieces;
     std::vector<std::pair<Rectangle, int>> tmxExtraPiecesWithType; // type: 1=e1, 2=e2
     std::vector<std::pair<Rectangle, float>> tmxFlipperBases; // position and rotation
-    std::vector<std::pair<Rectangle, float>> tmxFlippers; // position and rotation
     std::vector<TmxPolygon> tmxSpecialPolygons; // polygons from TMX
     PhysBody* mapBoundary = nullptr;
     float scoreFlashTimer = 0.0f;

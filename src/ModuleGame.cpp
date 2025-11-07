@@ -58,6 +58,10 @@ ModuleGame::ModuleGame(Application* app, bool start_enabled) : Module(app, start
     ballLossTimer = 0.0f;
     starLetterSpawnTimer = 0.0f;
 
+    // Black hole teleportation tracking
+    currentBlackHoleIndex = -1;
+    blackHoleDwellTime = 0.0f;
+
     ballSavedPosX = 0.0f;
     ballSavedPosY = 0.0f;
     ballSavedVelX = 0.0f;
@@ -194,7 +198,11 @@ bool ModuleGame::Start()
     {
         ball->listener = this;
         if (ball->body)
+        {
             ball->body->SetEnabled(false);
+            // Add slight linear damping to prevent excessive speed buildup
+            ball->body->SetLinearDamping(0.05f);
+        }
     }
 
     const int TMX_MAP_W = 1280;
@@ -222,7 +230,7 @@ bool ModuleGame::Start()
         if (b)
         {
             if (b->body && b->body->GetFixtureList())
-                b->body->GetFixtureList()->SetRestitution(1.5f);
+                b->body->GetFixtureList()->SetRestitution(0.8f);  // Reduced from 1.5f
             b->listener = this;
             bumpers.push_back(b);
         }
@@ -255,7 +263,7 @@ bool ModuleGame::Start()
         if (p)
         {
             if (p->body && p->body->GetFixtureList())
-                p->body->GetFixtureList()->SetRestitution(1.5f);
+                p->body->GetFixtureList()->SetRestitution(0.8f);  // Reduced from 1.5f
             p->listener = this;
             specialPolygons.push_back(p);
         }
@@ -760,7 +768,7 @@ void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
             if (ball && ball->body)
             {
                 b2Vec2 vel = ball->body->GetLinearVelocity();
-                vel *= 1.3f;
+                vel *= 1.1f;  // Reduced from 1.3f
                 ball->body->SetLinearVelocity(vel);
 
                 if (bumperHitSfx >= 0)
@@ -778,7 +786,7 @@ void ModuleGame::OnCollision(PhysBody* bodyA, PhysBody* bodyB)
             if (ball && ball->body)
             {
                 b2Vec2 vel = ball->body->GetLinearVelocity();
-                vel *= 1.3f;
+                vel *= 1.1f;  // Reduced from 1.3f
                 ball->body->SetLinearVelocity(vel);
 
                 if (bumperHitSfx >= 0)
@@ -1179,7 +1187,7 @@ void ModuleGame::RenderPlayingState()
 
         Texture2D* pieceTexture = (type == 1) ? &piece1Texture : &piece2Texture;
 
-        if (pieceTexture && pieceTexture->id)
+    if (pieceTexture && pieceTexture->id)
         {
             // Bounding box in local TMX polygon space
             float minX = FLT_MAX, minY = FLT_MAX, maxX = -FLT_MAX, maxY = -FLT_MAX;
@@ -1203,14 +1211,65 @@ void ModuleGame::RenderPlayingState()
 
             // Box2D angle is inverted due to Y flip during body creation; invert for visual
             float rotation = 0.0f;
+            float bodyAngle = 0.0f;
             if (specialPolygons[i]->body)
             {
-                rotation = -(specialPolygons[i]->body->GetAngle() * RADTODEG);
+                bodyAngle = specialPolygons[i]->body->GetAngle();
+                rotation = -(bodyAngle * RADTODEG);
+            }
+
+            // If e2: Left base -> snap BR corner to base's LEFT edge. Right base -> only mirror (no anchoring).
+            bool mirrorTexture = false;
+            if (type == 2 && !flipperBasePositions.empty())
+            {
+                // Find nearest base center
+                float bestDist = FLT_MAX;
+                int bestIndex = -1;
+                for (size_t bi = 0; bi < flipperBases.size(); ++bi)
+                {
+                    if (!flipperBases[bi]) continue;
+                    int bx = 0, by = 0;
+                    flipperBases[bi]->GetPosition(bx, by);
+                    float dx = (float)bx - ((float)x);
+                    float dy = (float)by - ((float)y);
+                    float d2 = dx * dx + dy * dy;
+                    if (d2 < bestDist) { bestDist = d2; bestIndex = (int)bi; }
+                }
+
+                if (bestIndex >= 0)
+                {
+                    int bx = 0, by = 0;
+                    flipperBases[bestIndex]->GetPosition(bx, by);
+                    float baseRadius = flipperBases[bestIndex]->width * 0.5f;
+                    float ang = -bodyAngle; // visual rotation radians
+
+                    if ((float)bx < SCREEN_WIDTH * 0.5f)
+                    {
+                        // LEFT side base: anchor bottom-right of e2 to the LEFT edge of the base
+                        Vector2 anchor = { (float)bx - baseRadius, (float)by };
+                        Vector2 localBR = { width * 0.5f, height * 0.5f }; // bottom-right corner
+                        Vector2 rotatedBR = { localBR.x * cosf(ang) - localBR.y * sinf(ang),
+                                              localBR.x * sinf(ang) + localBR.y * cosf(ang) };
+                        center.x = anchor.x - rotatedBR.x;
+                        center.y = anchor.y - rotatedBR.y;
+                    }
+                    else
+                    {
+                        // RIGHT side base: anchor bottom-left of e2 to the RIGHT edge of the base
+                        Vector2 anchor = { (float)bx + baseRadius, (float)by };
+                        Vector2 localBL = { -width * 0.5f, height * 0.5f }; // bottom-left corner
+                        Vector2 rotatedBL = { localBL.x * cosf(ang) - localBL.y * sinf(ang),
+                                              localBL.x * sinf(ang) + localBL.y * cosf(ang) };
+                        center.x = anchor.x - rotatedBL.x;
+                        center.y = anchor.y - rotatedBL.y;
+                        mirrorTexture = true; // mirror so shape visually matches left counterpart
+                    }
+                }
             }
 
             // Optional horizontal flip for e2 to mirror when on right side
             Rectangle src = { 0, 0, (float)pieceTexture->width, (float)pieceTexture->height };
-            if (type == 2 && center.x > SCREEN_WIDTH * 0.5f)
+            if (type == 2 && mirrorTexture)
             {
                 src.width = -src.width;
             }
@@ -1628,10 +1687,58 @@ void ModuleGame::SpawnStarLetter()
     int minY = (int)(SCREEN_HEIGHT * 0.3f);
     int maxY = (int)(SCREEN_HEIGHT * 0.7f);
 
-    int x = GetRandomValue(centerX - 200, centerX + 200);
-    int y = GetRandomValue(minY, maxY);
+    // Try multiple random positions and pick one that doesn't overlap static collisions (e1/e2, walls, bases)
+    const int letterRadiusPx = 20;
+    const int maxTries = 40;
+    int x = centerX;
+    int y = (minY + maxY) / 2;
 
-    PhysBody* letterBody = App->physics->CreateCircle(x, y, 20, b2_staticBody);
+    auto isBlocked = [&](int sx, int sy) -> bool {
+        b2World* world = App->physics->GetWorld();
+        if (!world) return false;
+
+        float wx = PIXELS_TO_METERS * sx;
+        float wy = PIXELS_TO_METERS * (SCREEN_HEIGHT - sy);
+        float r = PIXELS_TO_METERS * (letterRadiusPx + 4); // small padding
+
+        b2AABB aabb;
+        aabb.lowerBound.Set(wx - r, wy - r);
+        aabb.upperBound.Set(wx + r, wy + r);
+
+        struct QCb : public b2QueryCallback {
+            bool hit = false;
+            bool ReportFixture(b2Fixture* f) override {
+                // Avoid any fixture (static/dynamic) within the AABB so letters don't spawn inside geometry
+                hit = true;
+                return false; // stop early
+            }
+        } cb;
+
+        world->QueryAABB(&cb, aabb);
+        return cb.hit;
+    };
+
+    bool placed = false;
+    for (int i = 0; i < maxTries; ++i) {
+        int rx = GetRandomValue(centerX - 200, centerX + 200);
+        int ry = GetRandomValue(minY, maxY);
+        if (!isBlocked(rx, ry)) { x = rx; y = ry; placed = true; break; }
+    }
+
+    if (!placed) {
+        // Last resort: scan a small grid near center to find an empty slot
+        for (int dy = -150; dy <= 150 && !placed; dy += 30) {
+            for (int dx = -200; dx <= 200 && !placed; dx += 30) {
+                int rx = centerX + dx;
+                int ry = (minY + maxY) / 2 + dy;
+                if (rx > 40 && rx < SCREEN_WIDTH - 40 && ry > 40 && ry < SCREEN_HEIGHT - 40) {
+                    if (!isBlocked(rx, ry)) { x = rx; y = ry; placed = true; break; }
+                }
+            }
+        }
+    }
+
+    PhysBody* letterBody = App->physics->CreateCircle(x, y, letterRadiusPx, b2_staticBody);
 
     if (letterBody) {
         b2Fixture* fixture = letterBody->body->GetFixtureList();
@@ -1649,7 +1756,7 @@ void ModuleGame::SpawnStarLetter()
 
         starLetters.push_back(newLetter);
 
-        LOG("Spawned letter %c (index %d)", letter, nextLetterIndex);
+        LOG("Spawned letter %c (index %d) at %d,%d%s", letter, nextLetterIndex, x, y, placed ? "" : " (fallback)");
     }
 }
 
@@ -2169,8 +2276,110 @@ void ModuleGame::ApplyBlackHoleForces(float dt)
     }
 
     b2Vec2 ballPos = ball->body->GetPosition();
+    b2Vec2 ballVel = ball->body->GetLinearVelocity();
+    float ballSpeed = ballVel.Length();
     float ballMass = ball->body->GetMass();
 
+    int closestBHIndex = -1;
+    float closestDistSq = FLT_MAX;
+
+    // Find which black hole is closest to the ball
+    for (size_t i = 0; i < blackHoles.size(); ++i)
+    {
+        PhysBody* bh = blackHoles[i];
+        b2Vec2 bhPos = bh->body->GetPosition();
+        b2Vec2 diff = bhPos - ballPos;
+        float distSq = diff.LengthSquared();
+
+        if (distSq < closestDistSq)
+        {
+            closestDistSq = distSq;
+            closestBHIndex = (int)i;
+        }
+    }
+
+    const float BLACK_HOLE_RADIUS_SQ = 2.5f * 2.5f; // Increased from 1.5 to 2.5 meters squared
+    const float SLOW_SPEED_THRESHOLD = 3.5f; // Increased from 2.0 to 3.5 m/s
+
+    // Check if ball is inside a black hole and moving slowly (trapped)
+    if (closestBHIndex >= 0 && closestDistSq < BLACK_HOLE_RADIUS_SQ && ballSpeed < SLOW_SPEED_THRESHOLD)
+    {
+        if (currentBlackHoleIndex == closestBHIndex)
+        {
+            // Still in the same black hole - accumulate dwell time
+            blackHoleDwellTime += dt;
+
+            static float lastLogTime = 0.0f;
+            lastLogTime += dt;
+            if (lastLogTime > 0.5f) {
+                LOG("Black hole %d: trapped for %.2fs (speed: %.2f m/s, dist: %.2f)", 
+                    closestBHIndex, blackHoleDwellTime, ballSpeed, sqrtf(closestDistSq));
+                lastLogTime = 0.0f;
+            }
+
+            // If trapped long enough, teleport to another black hole
+            if (blackHoleDwellTime >= TELEPORT_THRESHOLD_TIME && blackHoles.size() > 1)
+            {
+                // Pick a random different black hole
+                int targetBHIndex = closestBHIndex;
+                int attempts = 0;
+                while (targetBHIndex == closestBHIndex && attempts < 10)
+                {
+                    targetBHIndex = GetRandomValue(0, (int)blackHoles.size() - 1);
+                    attempts++;
+                }
+
+                if (targetBHIndex != closestBHIndex)
+                {
+                    PhysBody* targetBH = blackHoles[targetBHIndex];
+                    b2Vec2 targetPos = targetBH->body->GetPosition();
+
+                    // Teleport ball to the target black hole with slight offset to avoid re-trapping
+                    float offsetAngle = GetRandomValue(0, 360) * DEGTORAD;
+                    float offsetDist = 0.8f; // meters - spawn outside the trap zone
+                    b2Vec2 offset(cosf(offsetAngle) * offsetDist, sinf(offsetAngle) * offsetDist);
+                    ball->body->SetTransform(targetPos + offset, ball->body->GetAngle());
+
+                    // Give a stronger random velocity to eject from the black hole
+                    float angle = GetRandomValue(0, 360) * DEGTORAD;
+                    float ejectSpeed = 5.0f; // Increased from 3.0 to 5.0 meters/second
+                    b2Vec2 ejectVel(cosf(angle) * ejectSpeed, sinf(angle) * ejectSpeed);
+                    ball->body->SetLinearVelocity(ejectVel);
+
+                    LOG("BLACK HOLE TELEPORT! %d -> %d (ejection speed: %.2f m/s)", closestBHIndex, targetBHIndex, ejectSpeed);
+                    AddScore(500, "Black Hole Teleport");
+
+                    // Play special sound if available
+                    if (specialHitSfx >= 0)
+                    {
+                        App->audio->PlayFx(specialHitSfx);
+                    }
+                }
+
+                // Reset tracking
+                blackHoleDwellTime = 0.0f;
+                currentBlackHoleIndex = -1;
+            }
+        }
+        else
+        {
+            // Entered a new black hole
+            currentBlackHoleIndex = closestBHIndex;
+            blackHoleDwellTime = 0.0f;
+            LOG("Entering black hole %d (speed: %.2f m/s)", closestBHIndex, ballSpeed);
+        }
+    }
+    else
+    {
+        // Ball is not in a black hole or moving too fast - reset tracking
+        if (currentBlackHoleIndex >= 0) {
+            LOG("Left black hole %d (speed: %.2f m/s, dist: %.2f)", currentBlackHoleIndex, ballSpeed, sqrtf(closestDistSq));
+        }
+        currentBlackHoleIndex = -1;
+        blackHoleDwellTime = 0.0f;
+    }
+
+    // Apply gravitational attraction force to all black holes
     for (PhysBody* bh : blackHoles)
     {
         b2Vec2 bhPos = bh->body->GetPosition();

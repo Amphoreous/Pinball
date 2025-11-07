@@ -114,9 +114,13 @@ bool ModuleGame::Start()
     ballTexture = LoadTexture("assets/balls/Planet1.png");
     if (ballTexture.id == 0) LOG("Warning: Failed to load ball texture");
 
-    // --- ELIMINADO: Carga de flipperTexture ---
-    // flipperTexture = LoadTexture("assets/flippers/flipper bat.png");
-    // if (flipperTexture.id == 0) LOG("Warning: Failed to load flipper texture");
+    flipperTexture = LoadTexture("assets/flippers/flipper bat.png");
+    if (flipperTexture.id == 0) {
+        LOG("Warning: Failed to load flipper texture");
+    }
+    else {
+        LOG("Loaded flipper bat texture, ID: %d", flipperTexture.id);
+    }
 
     flipperBaseTexture = LoadTexture("assets/flippers/Base Flipper Bat.png");
     if (flipperBaseTexture.id == 0) LOG("Warning: Failed to load flipper base texture");
@@ -400,8 +404,7 @@ bool ModuleGame::CleanUp()
 
     if (backgroundTexture.id) UnloadTexture(backgroundTexture);
     if (ballTexture.id) UnloadTexture(ballTexture);
-    // --- ELIMINADO: Descarga de flipperTexture ---
-    // if (flipperTexture.id) UnloadTexture(flipperTexture);
+    if (flipperTexture.id) UnloadTexture(flipperTexture);
     if (flipperBaseTexture.id) UnloadTexture(flipperBaseTexture);
     if (bumper1Texture.id) UnloadTexture(bumper1Texture);
     if (bumper2Texture.id) UnloadTexture(bumper2Texture);
@@ -937,20 +940,21 @@ void ModuleGame::UpdatePlayingState()
         LaunchBall();
     }
 
+    // Flipper motor control: ensure key press rotates bat upward (toward playfield center)
     if (leftFlipperJoint)
     {
         if (IsKeyDown(KEY_LEFT))
-            leftFlipperJoint->SetMotorSpeed(30.0f);  // Fast upward rotation
+            leftFlipperJoint->SetMotorSpeed(30.0f);  // upward
         else
-            leftFlipperJoint->SetMotorSpeed(-15.0f); // Fall back down
+            leftFlipperJoint->SetMotorSpeed(-15.0f);   // return downward
     }
 
     if (rightFlipperJoint)
     {
         if (IsKeyDown(KEY_RIGHT))
-            rightFlipperJoint->SetMotorSpeed(-30.0f); // Fast upward rotation
+            rightFlipperJoint->SetMotorSpeed(-30.0f);  // upward (mirror)
         else
-            rightFlipperJoint->SetMotorSpeed(15.0f);  // Fall back down
+            rightFlipperJoint->SetMotorSpeed(15.0f); // return downward
     }
 }
 
@@ -1009,7 +1013,7 @@ void ModuleGame::RenderPlayingState()
     int starStartX = comboTextX + 100;
     int starY = 20;
 
-    DrawText("COMBO:", comboTextX, starY, 20, YELLOW);
+    DrawTextEx(font, "COMBO:", { (float)comboTextX, (float)starY }, 20, 1, YELLOW);
     const char* star = "STAR";
     for (int i = 0; i < 4; ++i)
     {
@@ -1017,18 +1021,18 @@ void ModuleGame::RenderPlayingState()
 
         if (comboCompleteEffect && i < gameData.comboProgress) {
             float pulse = sinf(comboCompleteTimer * 20.0f) * 5.0f + 25.0f;
-            DrawText(TextFormat("%c", star[i]), starStartX + i * 25, starY, (int)pulse, comboCompleteFlashColor);
+            DrawTextEx(font, TextFormat("%c", star[i]), { (float)(starStartX + i * 25), (float)starY }, pulse, 1, comboCompleteFlashColor);
         }
         else {
-            DrawText(TextFormat("%c", star[i]), starStartX + i * 25, starY, 25, letterColor);
+            DrawTextEx(font, TextFormat("%c", star[i]), { (float)(starStartX + i * 25), (float)starY }, 25, 1, letterColor);
         }
     }
 
     if (scoreFlashActive && lastScoreIncrease > 0) {
         Color flashColor = YELLOW;
         if (scoreFlashTimer < 0.25f) {
-            DrawText(TextFormat("+%d!", lastScoreIncrease),
-                SCREEN_WIDTH / 2 - 40, 100, 30, flashColor);
+            DrawTextEx(font, TextFormat("+%d!", lastScoreIncrease),
+                { (float)(SCREEN_WIDTH / 2 - 40), 100.0f }, 30, 1, flashColor);
         }
     }
 
@@ -1059,7 +1063,7 @@ void ModuleGame::RenderPlayingState()
                 }
                 else {
                     DrawCircle(x, y, 15, ORANGE);
-                    DrawText(TextFormat("%c", starLetter.letter), x - 5, y - 10, 20, WHITE);
+                    DrawTextEx(font, TextFormat("%c", starLetter.letter), { (float)(x - 5), (float)(y - 10) }, 20, 1, WHITE);
                 }
             }
         }
@@ -1068,7 +1072,7 @@ void ModuleGame::RenderPlayingState()
     if (IsKeyDown(KEY_DOWN) && !ballLaunched)
     {
         float chargePercent = kickerForce / MAX_KICKER_FORCE;
-        DrawText("CHARGING...", SCREEN_WIDTH / 2 - 80, SCREEN_HEIGHT - 100, 25, YELLOW);
+        DrawTextEx(font, "CHARGING...", { (float)(SCREEN_WIDTH / 2 - 80), (float)(SCREEN_HEIGHT - 100) }, 25, 1, YELLOW);
         DrawRectangle(SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT - 60, 200, 20, DARKGRAY);
         DrawRectangle(SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT - 60, (int)(200 * chargePercent), 20, GREEN);
     }
@@ -1080,7 +1084,7 @@ void ModuleGame::RenderPlayingState()
         DrawRectangle(x - ballLossSensor->width / 2, y - ballLossSensor->height / 2,
             ballLossSensor->width, ballLossSensor->height,
             Color{ 255, 0, 0, 100 });
-        DrawText("BALL LOSS SENSOR", x - 80, y - 20, 12, RED);
+        DrawTextEx(font, "BALL LOSS SENSOR", { (float)(x - 80), (float)(y - 20) }, 12, 1, RED);
     }
 
     // Render bumpers (B1, B2, B3) with their specific textures
@@ -1154,60 +1158,111 @@ void ModuleGame::RenderPlayingState()
         logged = true;
     }
 
+    // Precompute flipper base screen positions for potential anchoring (used to attach e2 to base)
+    std::vector<Vector2> flipperBasePositions;
+    for (size_t bi = 0; bi < flipperBases.size(); ++bi)
+    {
+        if (!flipperBases[bi]) continue;
+        int bx = 0, by = 0;
+        flipperBases[bi]->GetPosition(bx, by);
+        flipperBasePositions.push_back(Vector2{ (float)bx, (float)by });
+    }
+
     for (size_t i = 0; i < specialPolygons.size() && i < tmxSpecialPolygons.size(); ++i)
     {
+        int x = 0, y = 0;
         if (!specialPolygons[i]) continue;
+        specialPolygons[i]->GetPosition(x, y);
 
         const TmxPolygon& tmxPoly = tmxSpecialPolygons[i];
-        int type = tmxPoly.type; // 1=e1, 2=e2
+        int type = tmxPoly.type;  // Use the type stored directly in TmxPolygon
 
-        Texture2D* pieceTexture = nullptr;
-        if (type == 1) pieceTexture = &piece1Texture;
-        else if (type == 2) pieceTexture = &piece2Texture;
+        // e1 → piece1.png, e2 → piece2.png
+        Texture2D* pieceTexture = (type == 1) ? &piece1Texture : &piece2Texture;
 
-        if (pieceTexture && pieceTexture->id && (type == 1 || type == 2))
+        if (pieceTexture && pieceTexture->id)
         {
-            int x = 0, y = 0;
-            specialPolygons[i]->GetPosition(x, y);
-
-            // Determine dimensions
-            float width = 0.0f, height = 0.0f;
-            if (i < tmxExtraPiecesWithType.size())
+            // Calculate bounding box dimensions from polygon points (TMX local coords)
+            float minX = FLT_MAX, minY = FLT_MAX, maxX = -FLT_MAX, maxY = -FLT_MAX;
+            for (size_t j = 0; j < tmxPoly.points.size(); j += 2)
             {
-                const Rectangle& r = tmxExtraPiecesWithType[i].first;
-                width = r.width * scaleX;
-                height = r.height * scaleY;
+                float px = tmxPoly.points[j];
+                float py = tmxPoly.points[j + 1];
+                if (px < minX) minX = px;
+                if (px > maxX) maxX = px;
+                if (py < minY) minY = py;
+                if (py > maxY) maxY = py;
             }
-            else
+
+            // Calculate scaled dimensions from TMX
+            float width = (maxX - minX) * scaleX;
+            float height = (maxY - minY) * scaleY;
+
+            // Default texture center: use physics body position
+            Vector2 center = { (float)x, (float)y };
+
+            // Get rotation from physics body (degrees)
+            float rotation = 0.0f;
+            if (specialPolygons[i]->body)
             {
-                float minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
-                for (size_t p = 0; p < tmxPoly.points.size(); p += 2)
+                rotation = specialPolygons[i]->body->GetAngle() * RADTODEG;
+            }
+
+            // If this is an e2 piece, try to anchor its bottom-right corner to the nearest flipper base
+            if (type == 2 && !flipperBasePositions.empty())
+            {
+                // find nearest base
+                float bestDist = FLT_MAX;
+                Vector2 bestBase = { 0.0f, 0.0f };
+                for (const auto &bp : flipperBasePositions)
                 {
-                    float px = (float)tmxPoly.points[p];
-                    float py = (float)tmxPoly.points[p + 1];
-                    if (px < minX) minX = px; if (px > maxX) maxX = px;
-                    if (py < minY) minY = py; if (py > maxY) maxY = py;
+                    float dx = bp.x - (float)x;
+                    float dy = bp.y - (float)y;
+                    float d2 = dx*dx + dy*dy;
+                    if (d2 < bestDist) { bestDist = d2; bestBase = bp; }
                 }
-                width = (maxX - minX) * scaleX;
-                height = (maxY - minY) * scaleY;
-                if (width <= 0 || height <= 0) { width = 60 * scaleX; height = 60 * scaleY; }
+
+                // If the nearest base is reasonably close, snap bottom-right to it
+                const float maxSnapDist = 200.0f * 200.0f; // squared threshold (~200px)
+                if (bestDist < maxSnapDist)
+                {
+                    float ang_rad = rotation * DEGTORAD;
+                    // vector from center to bottom-right corner in local (unrotated) coords
+                    Vector2 localBR = { width * 0.5f, height * 0.5f };
+                    // rotate localBR by rotation
+                    Vector2 rotatedBR = { localBR.x * cosf(ang_rad) - localBR.y * sinf(ang_rad),
+                                           localBR.x * sinf(ang_rad) + localBR.y * cosf(ang_rad) };
+                    // center = base - rotatedBR so that bottom-right corner lands on base
+                    center.x = bestBase.x - rotatedBR.x;
+                    center.y = bestBase.y - rotatedBR.y;
+                }
             }
 
             Rectangle src = { 0, 0, (float)pieceTexture->width, (float)pieceTexture->height };
-            if (type == 2 && x > SCREEN_WIDTH / 2) src.width = -src.width; // flip e2 on right side
+            if (type == 2)
+            {
+                // flip horizontally if needed depending on base side
+                if (center.x > SCREEN_WIDTH / 2) src.width = -src.width;
+            }
 
-            Rectangle dst = { (float)x, (float)y, width, height };
+            Rectangle dst = { center.x, center.y, width, height };
             Vector2 origin = { width / 2.0f, height / 2.0f };
 
-            float rotation = specialPolygons[i]->body ? specialPolygons[i]->body->GetAngle() * RADTODEG : 0.0f;
             DrawTexturePro(*pieceTexture, src, dst, origin, rotation, WHITE);
         }
         else
         {
-            // Outline fallback
-            int x = 0, y = 0; specialPolygons[i]->GetPosition(x, y);
+            // Fallback: draw the polygon outline in debug or if texture missing
+            static int logCount = 0;
+            if (logCount < 3)
+            {
+                LOG("Using fallback rendering for piece %zu: pieceTexture=%p, id=%d", i, pieceTexture, pieceTexture ? pieceTexture->id : 0);
+                logCount++;
+            }
+
             float angle_rad = specialPolygons[i]->body ? specialPolygons[i]->body->GetAngle() : 0.0f;
             Vector2 center = { (float)x, (float)y };
+
             std::vector<Vector2> screenPoints;
             for (size_t j = 0; j < tmxPoly.points.size(); j += 2)
             {
@@ -1217,16 +1272,18 @@ void ModuleGame::RenderPlayingState()
                 float rotatedY = localX * sinf(angle_rad) + localY * cosf(angle_rad);
                 screenPoints.push_back(Vector2{ center.x + rotatedX, center.y + rotatedY });
             }
+
             if (screenPoints.size() > 1)
             {
                 for (size_t j = 0; j < screenPoints.size(); ++j)
+                {
                     DrawLineV(screenPoints[j], screenPoints[(j + 1) % screenPoints.size()], YELLOW);
+                }
             }
         }
     }
 
     // Render flipper bases (BF from TMX)
-    static bool loggedBases = false;
     for (size_t i = 0; i < flipperBases.size(); ++i)
     {
         int x = 0, y = 0;
@@ -1235,12 +1292,6 @@ void ModuleGame::RenderPlayingState()
 
         if (flipperBaseTexture.id)
         {
-                if (!loggedBases && i == 0)
-                {
-                    LOG("Flipper base rendering: pos(%d,%d), width=%d, texture.id=%d", 
-                        x, y, flipperBases[i]->width, flipperBaseTexture.id);
-                    loggedBases = true;
-                }
             float bs = (float)flipperBases[i]->width / (float)flipperBaseTexture.width;
             int bw = (int)(flipperBaseTexture.width * bs);
             int bh = (int)(flipperBaseTexture.height * bs);
@@ -1255,38 +1306,61 @@ void ModuleGame::RenderPlayingState()
         }
     }
 
-    // Render left flipper
-        static bool loggedFlipper = false;
-    if (leftFlipper && leftFlipper->body)
-    {
-        int x, y;
-        leftFlipper->GetPosition(x, y);
-        float angle = leftFlipper->body->GetAngle() * RADTODEG;
-
-        if (flipperTexture.id)
+    // =================================================================
+    // Render Flippers with Texture
+    // =================================================================
+    auto draw_flipper_with_texture = [this](PhysBody* flipperBody, bool isLeft)
         {
-                if (!loggedFlipper)
-                {
-                    LOG("Left flipper rendering: pos(%d,%d), angle=%.1f, texture.id=%d", 
-                        x, y, angle, flipperTexture.id);
-                    loggedFlipper = true;
-                }
-            float s = 80.0f / (float)flipperTexture.width;
-            int w = (int)(flipperTexture.width * s);
-            int h = (int)(flipperTexture.height * s);
-            Rectangle src = { 0,0,(float)flipperTexture.width,(float)flipperTexture.height };
-            Rectangle dst = { (float)x, (float)y, (float)w, (float)h };
-            // Flipper texture is at 45° to top-right in the PNG. We need to add 45° offset.
-            // The pivot is on the left side for left flipper (15% from left edge)
-            Vector2 origin = { w * 0.15f, h / 2.0f };
-            DrawTexturePro(flipperTexture, src, dst, origin, angle + 45.0f, WHITE);
-        }
-    }
+            if (!flipperBody || !flipperBody->body) return;
+            if (!flipperTexture.id) return;
+
+            b2Body* body = flipperBody->body;
+            b2Vec2 pos = body->GetPosition();
+            float angle = body->GetAngle();
+
+            // Convert position to screen coordinates
+            int x = (int)(METERS_TO_PIXELS * pos.x);
+            int y = (int)(SCREEN_HEIGHT - (METERS_TO_PIXELS * pos.y));
+
+            // Desired visual height will match the physics flipper height (preserves size)
+            float dstHeight = (float)flipperBody->height;
+            // Compute scale to preserve aspect ratio of the texture (no stretching)
+            float scale = dstHeight / (float)flipperTexture.height;
+            float dstWidth = (float)flipperTexture.width * scale;
+
+            Rectangle src = { 0, 0, (float)flipperTexture.width, (float)flipperTexture.height };
+            // Flip texture horizontally for right flipper by negating src.width
+            if (!isLeft)
+            {
+                src.width = -src.width;
+            }
+
+            // The Box2D flipper body is positioned at the pivot (one end of the flipper).
+            // The visual center must be offset from the pivot by half the flipper visual width.
+            float localOffsetX = (isLeft ? dstWidth * 0.5f : -dstWidth * 0.5f);
+            float ang_rad = angle; // body angle in radians
+            // Rotate local offset into world/screen space
+            float offsetX = localOffsetX * cosf(ang_rad) - 0.0f * sinf(ang_rad);
+            float offsetY = localOffsetX * sinf(ang_rad) + 0.0f * cosf(ang_rad);
+
+            // Compute visual center in screen coordinates (pivot is at x,y)
+            float centerX = (float)x + offsetX;
+            float centerY = (float)y + offsetY;
+
+            Rectangle dst = { centerX, centerY, dstWidth, dstHeight };
+            Vector2 origin = { dstWidth / 2.0f, dstHeight / 2.0f };
+            float rotation = angle * RADTODEG;
+
+            DrawTexturePro(flipperTexture, src, dst, origin, rotation, WHITE);
+        };
+
+    // Render left flipper
+    draw_flipper_with_texture(leftFlipper, true);
 
     // Render right flipper
-    draw_flipper_hitbox(rightFlipper);
+    draw_flipper_with_texture(rightFlipper, false);
     // =================================================================
-    // FIN DE LA SECCIÓN CORREGIDA
+    // END Flipper Rendering
     // =================================================================
 
     // Render ball
@@ -1310,7 +1384,7 @@ void ModuleGame::RenderPlayingState()
         }
     }
 
-    DrawText("Press P to Pause", SCREEN_WIDTH - 200, SCREEN_HEIGHT - 60, 16, LIGHTGRAY);
+    DrawTextEx(font, "Press P to Pause", { (float)(SCREEN_WIDTH - 200), (float)(SCREEN_HEIGHT - 60) }, 16, 1, LIGHTGRAY);
 }
 
 void ModuleGame::UpdatePausedState()
@@ -1379,22 +1453,22 @@ void ModuleGame::RenderGameOverState()
         ClearBackground(Color{ 30, 10, 10, 255 });
 
     const char* gameOverText = "GAME OVER";
-    int textWidth = MeasureText(gameOverText, 70);
-    DrawText(gameOverText, SCREEN_WIDTH / 2 - textWidth / 2, 150, 70, RED);
+    Vector2 textSize = MeasureTextEx(font, gameOverText, 70, 2);
+    DrawTextEx(font, gameOverText, { (float)(SCREEN_WIDTH / 2 - textSize.x / 2), 150.0f }, 70, 2, RED);
 
-    DrawText(TextFormat("Final Score: %d", gameData.previousScore),
-        SCREEN_WIDTH / 2 - 150, 280, 35, WHITE);
+    DrawTextEx(font, TextFormat("Final Score: %d", gameData.previousScore),
+        { (float)(SCREEN_WIDTH / 2 - 150), 280.0f }, 35, 1, WHITE);
 
     if (gameData.previousScore == gameData.highestScore && gameData.highestScore > 0)
     {
-        DrawText("NEW HIGH SCORE!", SCREEN_WIDTH / 2 - 150, 340, 30, GOLD);
+        DrawTextEx(font, "NEW HIGH SCORE!", { (float)(SCREEN_WIDTH / 2 - 150), 340.0f }, 30, 1, GOLD);
     }
 
-    DrawText(TextFormat("High Score: %d", gameData.highestScore),
-        SCREEN_WIDTH / 2 - 140, 380, 30, YELLOW);
+    DrawTextEx(font, TextFormat("High Score: %d", gameData.highestScore),
+        { (float)(SCREEN_WIDTH / 2 - 140), 380.0f }, 30, 1, YELLOW);
 
-    DrawText("Press M to Main Menu", SCREEN_WIDTH / 2 - 150, 450, 25, SKYBLUE);
-    DrawText("Press R to Restart", SCREEN_WIDTH / 2 - 150, 500, 25, GREEN);
+    DrawTextEx(font, "Press M to Main Menu", { (float)(SCREEN_WIDTH / 2 - 150), 450.0f }, 25, 1, SKYBLUE);
+    DrawTextEx(font, "Press R to Restart", { (float)(SCREEN_WIDTH / 2 - 150), 500.0f }, 25, 1, GREEN);
 }
 
 void ModuleGame::UpdateYouWinState()
@@ -1435,19 +1509,19 @@ void ModuleGame::RenderYouWinState()
         ClearBackground(Color{ 10, 30, 10, 255 });
 
     const char* youWinText = "YOU WIN!";
-    int textWidth = MeasureText(youWinText, 70);
-    DrawText(youWinText, SCREEN_WIDTH / 2 - textWidth / 2, 150, 70, GREEN);
+    Vector2 textSize = MeasureTextEx(font, youWinText, 70, 2);
+    DrawTextEx(font, youWinText, { (float)(SCREEN_WIDTH / 2 - textSize.x / 2), 150.0f }, 70, 2, GREEN);
 
-    DrawText(TextFormat("New High Score: %d", gameData.previousScore),
-        SCREEN_WIDTH / 2 - 180, 280, 35, GOLD);
+    DrawTextEx(font, TextFormat("New High Score: %d", gameData.previousScore),
+        { (float)(SCREEN_WIDTH / 2 - 180), 280.0f }, 35, 1, GOLD);
 
-    DrawText("CONGRATULATIONS!", SCREEN_WIDTH / 2 - 150, 340, 30, YELLOW);
+    DrawTextEx(font, "CONGRATULATIONS!", { (float)(SCREEN_WIDTH / 2 - 150), 340.0f }, 30, 1, YELLOW);
 
-    DrawText(TextFormat("Previous High Score: %d", gameData.highestScore),
-        SCREEN_WIDTH / 2 - 200, 380, 25, LIGHTGRAY);
+    DrawTextEx(font, TextFormat("Previous High Score: %d", gameData.highestScore),
+        { (float)(SCREEN_WIDTH / 2 - 200), 380.0f }, 25, 1, LIGHTGRAY);
 
-    DrawText("Press M to Main Menu", SCREEN_WIDTH / 2 - 150, 450, 25, SKYBLUE);
-    DrawText("Press R to Play Again", SCREEN_WIDTH / 2 - 150, 500, 25, GREEN);
+    DrawTextEx(font, "Press M to Main Menu", { (float)(SCREEN_WIDTH / 2 - 150), 450.0f }, 25, 1, SKYBLUE);
+    DrawTextEx(font, "Press R to Play Again", { (float)(SCREEN_WIDTH / 2 - 150), 500.0f }, 25, 1, GREEN);
 }
 
 void ModuleGame::LaunchBall()
@@ -1666,35 +1740,35 @@ void ModuleGame::CompleteStarCombo()
 void ModuleGame::DrawAudioSettings()
 {
     DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Color{ 0,0,0,200 });
-    DrawText("AUDIO SETTINGS", SCREEN_WIDTH / 2 - 150, 50, 30, WHITE);
-    DrawText("Press F2 to close", SCREEN_WIDTH / 2 - 100, 90, 16, GRAY);
+    DrawTextEx(font, "AUDIO SETTINGS", { (float)(SCREEN_WIDTH / 2 - 150), 50.0f }, 30, 1, WHITE);
+    DrawTextEx(font, "Press F2 to close", { (float)(SCREEN_WIDTH / 2 - 100), 90.0f }, 16, 1, GRAY);
 
     int startY = 150;
     int spacing = 80;
-    DrawText("Master Volume:", 100, startY, 20, WHITE);
-    DrawText(TextFormat("%.0f%%", App->audio->GetMasterVolume() * 100), 400, startY, 20, YELLOW);
+    DrawTextEx(font, "Master Volume:", { 100.0f, (float)startY }, 20, 1, WHITE);
+    DrawTextEx(font, TextFormat("%.0f%%", App->audio->GetMasterVolume() * 100), { 400.0f, (float)startY }, 20, 1, YELLOW);
     DrawRectangle(100, startY + 30, 400, 20, DARKGRAY);
     DrawRectangle(100, startY + 30, (int)(400 * App->audio->GetMasterVolume()), 20, GREEN);
-    DrawText("[1/2] Decrease/Increase", 520, startY + 5, 16, LIGHTGRAY);
+    DrawTextEx(font, "[1/2] Decrease/Increase", { 520.0f, (float)(startY + 5) }, 16, 1, LIGHTGRAY);
 
-    DrawText("Music Volume:", 100, startY + spacing, 20, WHITE);
-    DrawText(TextFormat("%.0f%%", App->audio->GetMusicVolume() * 100), 400, startY + spacing, 20, YELLOW);
+    DrawTextEx(font, "Music Volume:", { 100.0f, (float)(startY + spacing) }, 20, 1, WHITE);
+    DrawTextEx(font, TextFormat("%.0f%%", App->audio->GetMusicVolume() * 100), { 400.0f, (float)(startY + spacing) }, 20, 1, YELLOW);
     DrawRectangle(100, startY + spacing + 30, 400, 20, DARKGRAY);
     DrawRectangle(100, startY + spacing + 30, (int)(400 * App->audio->GetMusicVolume()), 20, BLUE);
-    DrawText("[3/4] Decrease/Increase", 520, startY + spacing + 5, 16, LIGHTGRAY);
+    DrawTextEx(font, "[3/4] Decrease/Increase", { 520.0f, (float)(startY + spacing + 5) }, 16, 1, LIGHTGRAY);
 
-    DrawText("SFX Volume:", 100, startY + spacing * 2, 20, WHITE);
-    DrawText(TextFormat("%.0f%%", App->audio->GetSFXVolume() * 100), 400, startY + spacing * 2, 20, YELLOW);
+    DrawTextEx(font, "SFX Volume:", { 100.0f, (float)(startY + spacing * 2) }, 20, 1, WHITE);
+    DrawTextEx(font, TextFormat("%.0f%%", App->audio->GetSFXVolume() * 100), { 400.0f, (float)(startY + spacing * 2) }, 20, 1, YELLOW);
     DrawRectangle(100, startY + spacing * 2 + 30, 400, 20, DARKGRAY);
     DrawRectangle(100, startY + spacing * 2 + 30, (int)(400 * App->audio->GetSFXVolume()), 20, RED);
-    DrawText("[5/6] Decrease/Increase", 520, startY + spacing * 2 + 5, 16, LIGHTGRAY);
+    DrawTextEx(font, "[5/6] Decrease/Increase", { 520.0f, (float)(startY + spacing * 2 + 5) }, 16, 1, LIGHTGRAY);
 
-    DrawText("Mute All: [M]", 100, startY + spacing * 3, 20, WHITE);
-    if (App->audio->GetMasterVolume() == 0.0f) DrawText("MUTED", 300, startY + spacing * 3, 20, RED);
-    else DrawText("ACTIVE", 300, startY + spacing * 3, 20, GREEN);
+    DrawTextEx(font, "Mute All: [M]", { 100.0f, (float)(startY + spacing * 3) }, 20, 1, WHITE);
+    if (App->audio->GetMasterVolume() == 0.0f) DrawTextEx(font, "MUTED", { 300.0f, (float)(startY + spacing * 3) }, 20, 1, RED);
+    else DrawTextEx(font, "ACTIVE", { 300.0f, (float)(startY + spacing * 3) }, 20, 1, GREEN);
 
-    DrawText("Press [S] to save settings", SCREEN_WIDTH / 2 - 120, SCREEN_HEIGHT - 80, 18, GREEN);
-    if (settingsSavedMessage) DrawText("Settings Saved!", SCREEN_WIDTH / 2 - 80, SCREEN_HEIGHT - 50, 20, LIME);
+    DrawTextEx(font, "Press [S] to save settings", { (float)(SCREEN_WIDTH / 2 - 120), (float)(SCREEN_HEIGHT - 80) }, 18, 1, GREEN);
+    if (settingsSavedMessage) DrawTextEx(font, "Settings Saved!", { (float)(SCREEN_WIDTH / 2 - 80), (float)(SCREEN_HEIGHT - 50) }, 20, 1, LIME);
 }
 
 void ModuleGame::UpdateAudioSettings()
@@ -1773,16 +1847,14 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
             continue;
         }
 
-    char* nameTag = strstr(filePtr, "name=\"");
-    bool isSpecialPoly = false;
-    int polyType = 0; // 1=e1, 2=e2
+        char* nameTag = strstr(filePtr, "name=\"");
+        bool isSpecialPoly = false;
 
         if (nameTag && nameTag < objectEnd)
         {
             if (strncmp(nameTag + 6, "e1", 2) == 0 || strncmp(nameTag + 6, "e2", 2) == 0)
             {
                 isSpecialPoly = true;
-                polyType = (nameTag[6] == 'e' && nameTag[7] == '1') ? 1 : 2;
             }
 
             float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
@@ -1824,21 +1896,51 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
             }
             else if (strncmp(nameTag + 6, "e1", 2) == 0)
             {
-                // e1 tracked as special polygon; width/height may be absent for polygon objects
-                LOG("TMX parse: Found e1 (piece1) at (%.0f, %.0f)", x, y);
-                objectsFound++;
+                // e1 = piece1.png (triangular extra piece)
+                char* polygonMarker = strstr(filePtr, "<polygon points=\"");
+
+                // **FIX:** Manually check, do NOT rely on 'attributesFound'
+                char* xStr_e1 = strstr(filePtr, "x=\"");
+                char* yStr_e1 = strstr(filePtr, "y=\"");
+
+                if (polygonMarker && polygonMarker < objectEnd && xStr_e1 && xStr_e1 < objectEnd && yStr_e1 && yStr_e1 < objectEnd)
+                {
+                    float x_e1 = (float)atof(xStr_e1 + 3);
+                    float y_e1 = (float)atof(yStr_e1 + 3);
+
+                    Rectangle rect = { x_e1, y_e1, 0, 0 }; // W/H are not needed here
+                    tmxExtraPiecesWithType.push_back({ rect, 1 });
+                    LOG("TMX parse: Found e1 (piece1) at (%.0f, %.0f)", x_e1, y_e1);
+                    objectsFound++;
+                }
             }
             else if (strncmp(nameTag + 6, "e2", 2) == 0)
             {
-                // e2 tracked as special polygon; width/height may be absent for polygon objects
-                float rotation = 0.0f;
-                char* rotStr = strstr(filePtr, "rotation=\"");
-                if (rotStr && rotStr < objectEnd)
+                // e2 = piece2.png (triangular extra piece)
+                char* polygonMarker = strstr(filePtr, "<polygon points=\"");
+
+                // **FIX:** Manually check, do NOT rely on 'attributesFound'
+                char* xStr_e2 = strstr(filePtr, "x=\"");
+                char* yStr_e2 = strstr(filePtr, "y=\"");
+
+                if (polygonMarker && polygonMarker < objectEnd && xStr_e2 && xStr_e2 < objectEnd && yStr_e2 && yStr_e2 < objectEnd)
                 {
-                    rotation = (float)atof(rotStr + 10);
+                    float x_e2 = (float)atof(xStr_e2 + 3);
+                    float y_e2 = (float)atof(yStr_e2 + 3);
+
+                    // Get rotation attribute
+                    float rotation = 0.0f;
+                    char* rotStr = strstr(filePtr, "rotation=\"");
+                    if (rotStr && rotStr < objectEnd)
+                    {
+                        rotation = (float)atof(rotStr + 10);
+                    }
+
+                    Rectangle rect = { x_e2, y_e2, 0, 0 }; // W/H are not needed here
+                    tmxExtraPiecesWithType.push_back({ rect, 2 });
+                    LOG("TMX parse: Found e2 (piece2) at (%.0f, %.0f) rotation %.1f", x_e2, y_e2, rotation);
+                    objectsFound++;
                 }
-                LOG("TMX parse: Found e2 (piece2) at (%.0f, %.0f) rotation %.1f", x, y, rotation);
-                objectsFound++;
             }
             else if (strncmp(nameTag + 6, "BF", 2) == 0)
             {
@@ -1858,23 +1960,10 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
                     objectsFound++;
                 }
             }
-            else if (strncmp(nameTag + 6, "FB", 2) == 0)
-            {
-                // FB = flipper (flipper bat.png)
-                if (attributesFound)
-                {
-                    float rotation = 0.0f;
-                    char* rotStr = strstr(filePtr, "rotation=\"");
-                    if (rotStr && rotStr < objectEnd)
-                    {
-                        rotation = (float)atof(rotStr + 10);
-                    }
-                    Rectangle rect = { x, y, w, h };
-                    tmxFlippers.push_back({ rect, rotation });
-                    LOG("TMX parse: Found flipper at (%.0f, %.0f) rotation %.1f", x, y, rotation);
-                    objectsFound++;
-                }
-            }
+            // =================================================================
+            // EL BLOQUE "else if (strncmp(nameTag + 6, "FB", 2) == 0)"
+            // HA SIDO ELIMINADO COMPLETAMENTE
+            // =================================================================
         }
 
         const char* polylineMarker = "<polyline points=\"";
@@ -1924,7 +2013,7 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
             }
         }
 
-    const char* polygonMarker = "<polygon points=\"";
+        const char* polygonMarker = "<polygon points=\"";
         char* polygonStart = strstr(filePtr, polygonMarker);
 
         if (isSpecialPoly && polygonStart && polygonStart < objectEnd)
@@ -1954,10 +2043,16 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
                     poly.x = offsetX;
                     poly.y = offsetY;
                     poly.rotation = rotation;
-                    poly.type = polyType;
+
+                    // Set polygon type based on object name (e1/e2)
+                    if (nameTag && nameTag < objectEnd)
+                    {
+                        if (strncmp(nameTag + 6, "e1", 2) == 0) poly.type = 1;
+                        else if (strncmp(nameTag + 6, "e2", 2) == 0) poly.type = 2;
+                        else poly.type = 0;
+                    }
 
                     char* token = strtok(pointsStr, " ,");
-                    float minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
                     while (token != NULL)
                     {
                         float px = (float)atof(token);
@@ -1968,26 +2063,12 @@ bool ModuleGame::LoadTMXMap(const char* filepath)
                         // **CLAVE: Guardar coordenadas TMX SIN escalar**
                         poly.points.push_back((int)px);
                         poly.points.push_back((int)py);
-                        if (px < minX) minX = px; if (px > maxX) maxX = px;
-                        if (py < minY) minY = py; if (py > maxY) maxY = py;
                         token = strtok(NULL, " ,");
                     }
                     free(pointsStr);
                     tmxSpecialPolygons.push_back(poly);
                     LOG("TMX parse: Found Special Polygon at TMX(%.0f, %.0f) with %d points, rotation %.0f",
                         offsetX, offsetY, (int)poly.points.size() / 2, rotation);
-                    // Derive a bounding rect for rendering sizes (even if width/height missing)
-                    if (polyType == 1 || polyType == 2)
-                    {
-                        float bx = offsetX + minX;
-                        float by = offsetY + minY;
-                        float bw = (maxX - minX);
-                        float bh = (maxY - minY);
-                        if (bw > 0 && bh > 0)
-                        {
-                            tmxExtraPiecesWithType.push_back({ Rectangle{ bx, by, bw, bh }, polyType });
-                        }
-                    }
                     objectsFound++;
                 }
             }
